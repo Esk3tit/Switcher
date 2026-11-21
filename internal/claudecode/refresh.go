@@ -33,7 +33,7 @@ func inactiveRecovery(predecessor string) []byte {
 // keychainValidator is a Keychain that can tell, before a refresh spends its
 // grant, that the refreshed credential could not be written.
 type keychainValidator interface {
-	Validate(ctx context.Context, service string, next []byte, current fileValue) error
+	Validate(service string, next []byte) error
 }
 
 // A changed signature must not silently skip the check.
@@ -53,7 +53,7 @@ func (m *Manager) refreshNativeLocked(ctx context.Context, a *store.Account, cur
 	}
 	if m.paths.Keychain {
 		if validator, ok := m.keys.(keychainValidator); ok {
-			if err := validator.Validate(ctx, m.paths.Service, prepared, current.Keychain); err != nil {
+			if err := validator.Validate(m.paths.Service, prepared); err != nil {
 				return err
 			}
 		}

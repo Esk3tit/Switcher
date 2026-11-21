@@ -57,8 +57,8 @@ cross-build:
 			(cd cmd/switcher-tailnet && CGO_ENABLED=0 GOOS=linux GOARCH="$$arch" go build -o "$$tmp/tailnet-linux-$$arch" .); \
 		done
 
-# The released Mac slices are built with cgo, for the native Keychain
-# writer. Both must build on a Mac here, not first when a tag is pushed.
+# The released Mac slices are built with cgo. Both must build on a Mac
+# here, not first when a tag is pushed.
 cgo-build:
 	@set -eu; for arch in arm64 amd64; do \
 		CGO_ENABLED=1 GOOS=darwin GOARCH=$$arch go build -o /dev/null .; \

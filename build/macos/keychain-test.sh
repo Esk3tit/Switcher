@@ -1,8 +1,8 @@
 #!/bin/sh
-# Tests the native Keychain writer against a real keychain: an item made by
-# /usr/bin/security, as Claude Code makes its own, updated by a freshly built
-# binary that macOS has never seen. It makes a throwaway keychain the default
-# one, so it runs only on a CI runner, never on a Mac someone uses.
+# Tests Keychain writes against a real keychain: an item made by
+# /usr/bin/security, as Claude Code makes its own, updated through it by a
+# freshly built binary that macOS has never seen. It makes a throwaway keychain
+# the default one, so it runs only on a CI runner, never on a Mac someone uses.
 set -eu
 if [ "${CI:-}" != "true" ]; then
   echo "keychain-test.sh changes the default keychain; it runs only in CI" >&2
@@ -23,7 +23,7 @@ codesign --force -s - "$tmp/keychain.test"
 SWITCHER_REAL_KEYCHAIN_TEST=1 "$tmp/keychain.test" -test.v -test.count=3 \
   -test.run 'TestRealKeychain(OversizedUpdate|ManagerSwitchAndRefresh)'
 
-# The item's access control list is the same after a native update, so
+# The item's access control list is the same after a long update, so
 # /usr/bin/security, and with it Claude Code, still owns the item.
 item=Switcher-test-acl
 printf 'add-generic-password -U -a "%s" -s "%s" -X %s\n' "$USER" "$item" "$(printf small | xxd -p)" | security -i
@@ -38,4 +38,4 @@ test "$(security find-generic-password -a "$USER" -s "$item" -w | wc -c | tr -d 
 # Locked, with nobody to answer a dialog: an error at once, not a wait.
 security lock-keychain "$kc"
 SWITCHER_REAL_KEYCHAIN_LOCKED="$item" "$tmp/keychain.test" -test.v -test.run TestRealKeychainLockedFailsFast
-echo "native Keychain writer verified on $(sw_vers -productVersion) $(uname -m)"
+echo "Keychain writes verified on $(sw_vers -productVersion) $(uname -m)"
