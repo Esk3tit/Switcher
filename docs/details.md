@@ -80,6 +80,54 @@ required; OpenCode Go uses its own API key.
   and go with their account when it is removed. A Mac that uses another
   Mac's accounts saves the limit on that host, where it applies to every Mac
   (`PATCH /api/accounts/{id}` with `{"usage_limit": 10}`; `0` removes it).
+- **Antigravity**: Switcher shows each account's plan (AI Pro, AI Ultra,
+  Free) and its quota per model group and window ("Gemini 5-hour",
+  "Gemini weekly"), read from `daily-cloudcode-pa.googleapis.com` as the
+  Antigravity app reads it. **Use in Antigravity** (the card's button,
+  `switcher use`) is the only switch: with a fresh token it writes the
+  account's sign-in where `agy` and the Antigravity app keep theirs, the
+  login keychain item with service `gemini` and account `antigravity` (the
+  macOS Keychain, or the Linux keyring over D-Bus), and `agy`'s token file
+  `~/.gemini/antigravity-cli/antigravity-oauth-token` when one is there or
+  no keychain answers. Quit and reopen `agy` and the Antigravity app if
+  they run: until then they may keep, and save back, the previous sign-in.
+  An account signed in to Switcher before it asked for `agy`'s access
+  (the `aicode` scope) is refused until you sign in to it again. A sign-in
+  of another account that a switch replaces is kept in
+  `~/.switcher/antigravity-previous-signin.json` (0600). `agy` and Switcher
+  then share the account's refresh token, so signing out in `agy` may sign
+  that Switcher account out too. Switcher never routes Antigravity
+  requests (its `/antigravity/` proxy route answers 403) and never switches
+  Antigravity by itself, at a usage limit or for an ending subscription:
+  Google's terms forbid reaching Antigravity through other tools and it
+  suspends accounts it sees rotated automatically. A Mac that uses another
+  Mac's accounts gets the selection only; its own Antigravity keeps its
+  sign-in.
+- **Ending subscriptions**: no provider tells Switcher the day a canceled
+  subscription ends (Claude's sign-in reports only that it is active), so
+  you tell it: the account's ⋯ menu → **Subscription ends…** in the
+  dashboard, or `switcher ends <account> 2026-11-29`. The card, the phone,
+  the panel and the menu bar count down to the day (**Ends Nov 29 · in 7
+  days**). Until that day is over Switcher uses the account first: an
+  automatic pick (after an account runs out or reaches its limit, and the
+  proxy's failover) takes the paid account that ends soonest over one with
+  more usage left, and after a usage poll the provider moves onto it
+  whenever it has 10% or more left in each window (above its usage limit,
+  by a poll within the last 15 minutes), unless the account in use ends no
+  later or is the one you picked last. An ending account with less left
+  than that goes first nowhere. Claude Code's own login moves onto it only
+  with **Switch Claude automatically** on (or the login kept), since
+  otherwise nothing would move it off again once it runs out. Setting a day
+  that puts its account first is a pick too: the provider moves at the next
+  chance, right away when it can. A pick of your own holds, across
+  restarts, until the provider uses another account. An end date never
+  blocks a request: past the day, out of usage, at its limit, signed out or
+  on a Free plan, the account is passed over like any other. Days are kept
+  in `state.json` (`end_dates`) and go with their account when it is
+  removed (`PATCH /api/accounts/{id}` with `{"end_date": "2026-11-29"}`;
+  `""` removes it). For a Codex account the card shows the day ChatGPT's
+  sign-in says it is paid through (`paid_through`); that renews unless the
+  subscription was canceled, so it is not an end date by itself.
 - **Load card**: above Keep awake, the menu bar shows three rings for CPU,
   memory and GPU load, calm in green, amber from 70% and red from 90%, with
   the core count and memory in use beneath. The rings ease to each reading,
@@ -371,7 +419,7 @@ upstream, and configuring that provider's own CLI are three different things.
 | Claude | Browser OAuth or native Claude Code login import | Messages, token counting, and SSE fixture | Native credential/config switching with ownership and rollback fixtures; setup checks do not run a real native request |
 | OpenCode Go | Provider API key | Responses, chat, messages, and SSE fixture | Not enabled; v2 account, model, and transport unverified |
 | Grok Build | Device-code flow | HTTP session-service and SSE fixture only | Not enabled; entitlement and separate WebSocket relay unverified |
-| Antigravity (IDE) | Google OAuth with project onboarding | Full forwarding fixture not yet added | `agy` is a separate CLI; no verified setup |
+| Antigravity | Google OAuth with project onboarding | Never routed: the proxy answers 403 | Signs `agy` and the Antigravity app in on request (keychain item `gemini`/`antigravity`, or agy's token file) |
 | Gemini | Google OAuth | Full forwarding fixture not yet added | No verified native CLI route |
 | GitHub Copilot | GitHub device flow or Copilot CLI import | Full forwarding fixture not yet added | No native subscription setup; Copilot CLI BYOK is a separate billing path |
 

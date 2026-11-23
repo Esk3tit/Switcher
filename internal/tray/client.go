@@ -84,11 +84,23 @@ type Account struct {
 	// keeps; AtLimit says it reached it.
 	UsageLimit int  `json:"usage_limit"`
 	AtLimit    bool `json:"at_limit"`
+	// EndDate is the day the subscription ends (YYYY-MM-DD) and Ending that
+	// it is not over; PaidThrough when the provider says it is paid through.
+	EndDate     string `json:"end_date"`
+	Ending      bool   `json:"ending"`
+	PaidThrough int64  `json:"paid_through"`
+	// AppLoginAvailable: picking the account signs the provider's apps in
+	// (Antigravity); AppLoginActive: they use this account.
+	AppLoginAvailable bool `json:"app_login_available"`
+	AppLoginActive    bool `json:"app_login_active"`
 }
 
 // Selected is the account the account card marks: Claude Code's login for
 // Claude, the proxy's account otherwise.
 func (a Account) Selected() bool {
+	if a.AppLoginAvailable {
+		return a.AppLoginActive
+	}
 	if a.NativeSwitchAvailable {
 		return a.NativeActive
 	}
