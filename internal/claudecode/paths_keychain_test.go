@@ -8,6 +8,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"strings"
 	"switcher/internal/store"
 	"testing"
@@ -113,69 +115,129 @@ func TestKeychainAbsenceIsNotAReadFailure(t *testing.T) {
 	}
 }
 
-func TestOversizedKeychainPayloadNeverFallsBackToSecretArgv(t *testing.T) {
-	calls := 0
-	k := SystemKeychain{Runner: func(context.Context, []string, []byte) ([]byte, error) { calls++; return nil, nil }}
-	if err := k.Write(context.Background(), "Claude Code-credentials", []byte(strings.Repeat("a", 3000))); err == nil {
-		t.Fatal("oversized stdin payload accepted")
-	}
-	if calls != 0 {
-		t.Fatal("overflow attempted a credential write")
+// fakeSecurity answers the /usr/bin/security commands SystemKeychain runs,
+// keeping the items in m and recording each command's arguments.
+func fakeSecurity(t *testing.T, m *memoryKeychain, calls *[][]string) func(context.Context, []string, []byte) ([]byte, error) {
+	stdinWrite := regexp.MustCompile(`^add-generic-password -U -a "(?:[^"\\]|\\.)*" -s "((?:[^"\\]|\\.)*)" -X ([0-9a-f]*)\n$`)
+	return func(ctx context.Context, args []string, input []byte) ([]byte, error) {
+		*calls = append(*calls, append([]string(nil), args...))
+		service, encoded := "", ""
+		switch {
+		case len(args) == 6 && args[0] == "find-generic-password" && args[5] == "-w":
+			value, exists, err := m.Read(ctx, args[4])
+			if err != nil {
+				return nil, err
+			}
+			if !exists {
+				return nil, exitCode(44)
+			}
+			return append(value, '\n'), nil
+		case len(args) == 5 && args[0] == "delete-generic-password":
+			return nil, m.Delete(ctx, args[4])
+		case len(args) == 1 && args[0] == "-i":
+			match := stdinWrite.FindSubmatch(input)
+			if match == nil {
+				t.Fatalf("unexpected security -i input of %d bytes", len(input))
+			}
+			service = strings.NewReplacer(`\\`, `\`, `\"`, `"`).Replace(string(match[1]))
+			encoded = string(match[2])
+		case len(args) == 8 && args[0] == "add-generic-password" && args[1] == "-U" && args[6] == "-X":
+			if len(input) != 0 {
+				t.Fatal("an argument write also sent stdin")
+			}
+			service, encoded = args[5], args[7]
+		default:
+			t.Fatalf("unexpected security command %q", args[0])
+		}
+		value, err := hex.DecodeString(encoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return nil, m.Write(ctx, service, value)
 	}
 }
 
-// A record too large for the command line updates the existing item through
-// the native writer, is read back through the command, and never reaches
-// process arguments or the command's stdin.
-func TestOversizedKeychainWriteUpdatesTheExistingItemNatively(t *testing.T) {
+// Claude Code's item trusts only /usr/bin/security, so every write goes
+// through it: a record too long for security -i goes in its arguments.
+func TestLongKeychainWriteGoesThroughSecurityArguments(t *testing.T) {
 	t.Setenv("USER", "fixture-user")
-	secret := []byte(`{"claudeAiOauth":{"accessToken":"fixture-sensitive"},"mcpOAuth":"` + strings.Repeat("x", 6000) + `"}`)
-	var stored []byte
-	updates := 0
-	k := SystemKeychain{
-		Runner: func(_ context.Context, args []string, input []byte) ([]byte, error) {
-			if len(input) != 0 || strings.Contains(strings.Join(args, " "), "fixture-sensitive") {
-				t.Fatal("the oversized credential reached the security command")
-			}
-			if len(args) == 0 || args[0] != "find-generic-password" {
-				t.Fatalf("unexpected security command %v", args)
-			}
-			return append(append([]byte(nil), stored...), '\n'), nil
-		},
-		Update: func(_ context.Context, account, service string, value []byte) error {
-			if account != "fixture-user" || service != "Claude Code-credentials" {
-				t.Fatalf("update went to %q for %q", service, account)
-			}
-			updates++
-			stored = append([]byte(nil), value...)
-			return nil
-		},
-	}
-	if err := k.Write(context.Background(), "Claude Code-credentials", secret); err != nil {
+	service := "Claude Code-credentials"
+	secret := []byte(`{"claudeAiOauth":{"accessToken":"fixture-sensitive"},"mcpOAuth":"` + strings.Repeat("x", 11700) + `"}`)
+	m := &memoryKeychain{values: map[string][]byte{}}
+	var calls [][]string
+	k := SystemKeychain{Runner: fakeSecurity(t, m, &calls)}
+	if err := k.Validate(service, secret); err != nil {
 		t.Fatal(err)
 	}
-	if updates != 1 || !bytes.Equal(stored, secret) {
-		t.Fatal("the native writer did not store the credential once")
+	if err := k.Write(context.Background(), service, secret); err != nil {
+		t.Fatal(err)
 	}
-	// A small record still goes through the command.
-	if err := k.Validate(context.Background(), "Claude Code-credentials", []byte(`{}`), fileValue{}); err != nil || updates != 1 {
-		t.Fatalf("a small record asked for the native writer: %v", err)
+	want := [][]string{
+		{"add-generic-password", "-U", "-a", "fixture-user", "-s", service, "-X", hex.EncodeToString(secret)},
+		{"find-generic-password", "-a", "fixture-user", "-s", service, "-w"},
 	}
+	if !reflect.DeepEqual(calls, want) || !bytes.Equal(m.values[service], secret) {
+		t.Fatalf("long write ran %d commands, stored %v", len(calls), bytes.Equal(m.values[service], secret))
+	}
+
 	// A write that does not read back is not a write.
-	lossy := k
-	lossy.Update = func(context.Context, string, string, []byte) error { return nil }
-	stored = []byte("something else")
-	if err := lossy.Write(context.Background(), "Claude Code-credentials", secret); err == nil {
-		t.Fatal("an unverified native write was accepted")
+	lossy := SystemKeychain{Runner: func(ctx context.Context, args []string, input []byte) ([]byte, error) {
+		if args[0] == "find-generic-password" {
+			return []byte("something else\n"), nil
+		}
+		return nil, nil
+	}}
+	if err := lossy.Write(context.Background(), service, secret); err == nil {
+		t.Fatal("an unverified write was accepted")
 	}
-	// No item yet: nothing is created natively, the caller is told.
-	missing := k
-	missing.Update = func(context.Context, string, string, []byte) error { return errKeychainItemMissing }
-	if err := missing.Write(context.Background(), "Claude Code-credentials", secret); !errors.Is(err, errKeychainItemMissing) {
-		t.Fatalf("expected a missing item, got %v", err)
+
+	calls = nil
+	over := bytes.Repeat([]byte("a"), keychainValueLimit+1)
+	if err := k.Validate(service, over); !errors.Is(err, errKeychainValueTooLarge) {
+		t.Fatalf("preflight accepted a record over the limit: %v", err)
 	}
-	if err := k.Write(context.Background(), "Claude Code-credentials", bytes.Repeat([]byte("a"), nativeFileLimit+1)); err == nil {
-		t.Fatal("a record over the storage limit was accepted")
+	if err := k.Write(context.Background(), service, over); !errors.Is(err, errKeychainValueTooLarge) || len(calls) != 0 {
+		t.Fatalf("a record over the limit reached security: %v", err)
+	}
+}
+
+func TestKeychainWritesSwitchToArgumentsWhereSecurityStdinEnds(t *testing.T) {
+	t.Setenv("USER", "fixture-user")
+	sawStdin, sawArgs := false, false
+	for size := 1950; size < 2050; size++ {
+		args, input, err := writeCommand("Claude Code-credentials", bytes.Repeat([]byte("a"), size))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if args[0] == "-i" {
+			if sawArgs || len(input) > securityLineLimit {
+				t.Fatalf("a %d-byte record overflowed security -i", size)
+			}
+			sawStdin = true
+		} else {
+			sawArgs = true
+		}
+	}
+	if !sawStdin || !sawArgs {
+		t.Fatal("the sizes did not cross the security -i line limit")
+	}
+}
+
+// Switcher's own process is never the one writing Claude Code's item:
+// macOS would ask the person each time, as the item does not trust it.
+func TestKeychainCodeHasNoNativeWriter(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(raw, []byte("import "+`"C"`)) || bytes.Contains(raw, []byte("SecKeychainItem"+"ModifyContent")) {
+			t.Fatalf("%s writes the Keychain from Switcher's own process", file)
+		}
 	}
 }
 

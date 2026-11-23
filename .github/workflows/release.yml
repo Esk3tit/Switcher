@@ -60,8 +60,8 @@ jobs:
 
       - name: Verify
         run: make verify
-      # The native Keychain writer, on a throwaway keychain of this runner.
-      - name: Verify the native Keychain writer
+      # Keychain writes through /usr/bin/security, on a throwaway keychain of this runner.
+      - name: Verify Keychain writes
         run: build/macos/keychain-test.sh
 
   # Builds every file of the release. It can write nothing: the installer's

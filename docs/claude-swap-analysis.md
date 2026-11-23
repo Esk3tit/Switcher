@@ -77,12 +77,12 @@ departing account's saved refresh token.
 - Denied/locked Keychain reads are not genuine absence. The plaintext fallback
   may hold a superseded refresh-token generation and must not be consumed.
 - Upstream writes through `/usr/bin/security`; its short payload uses stdin hex.
-  Long payloads fall back to argv. Switcher's port never places credentials in
-  process arguments: a record too long for stdin updates the existing item in
-  place through Security.framework, with Keychain dialogs off, and is refused
-  where that is not possible (no item yet, or a build without cgo). A refresh
-  first writes the current bytes back that way, so a Mac that refuses the
-  native writer is found out before the grant is spent.
+  Long payloads fall back to argv. Switcher does the same: Claude Code's item
+  trusts only `/usr/bin/security`, and Claude Code resets that list on each of
+  its own writes, so a write from Switcher's own process would ask the person
+  every time. A record too long for `security -i` is therefore briefly visible
+  in the process list. Records over 256 KiB, which would not fit the exec
+  argument space, are refused before a refresh spends its grant.
 
 ### Ownership and locks
 
