@@ -263,6 +263,14 @@ on a standard account, macOS asks for an administrator password. Versions
 up to 1.11 updated through the GitHub CLI and fail on Macs without it;
 update those once with the install script above.
 
+This fork numbers its releases on its own, from 1.0.0, and its updates come
+only from its own releases. A Switcher installed from upstream's releases
+(1.40 and on) keeps updating from upstream and never offers this fork's:
+install this fork's Switcher once, with the installer or the install script
+above, which replace it as an older version and keep your accounts and
+settings. Each fork release's notes name the upstream Switcher version and
+commit it is built on.
+
 ## Quick start
 
 1. **Add accounts.** Open the dashboard from the menu bar and click

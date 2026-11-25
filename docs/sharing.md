@@ -199,7 +199,9 @@ pause for a moment; nothing changes on the client. It works while the client
 works without its host too. A host whose Switcher.app sits in a folder only
 an administrator can change refuses, since nobody is at it to enter the
 password; update that one on the host. A host before Switcher 1.21.0 does
-not take updates from its clients yet: update it on the host once.
+not take updates from its clients yet: update it on the host once. This
+fork's releases are numbered on their own, from 1.0.0, so a fork host is
+judged by the upstream release it is built on, which it reports too.
 
 ## Network and security
 

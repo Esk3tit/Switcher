@@ -606,7 +606,11 @@ environment; a terminal-only override needs the CLI command. The first
   installs only a release newer than what runs.
   `install.sh` downloads over HTTPS only, redirects included, bounds every
   download, and does not replace a newer installed version with an older
-  release unless `SWITCHER_TAG` asks for one. The
+  release unless `SWITCHER_TAG` asks for one. A Switcher that is not one of
+  this fork's builds (an upstream release, whose numbers are 1.40 and on
+  while this fork's start at 1.0.0) counts as older; so it does for the Mac
+  installer, which tells the fork's app by `SwitcherReleaseRepo` in its
+  `Info.plist`. The
   release pipeline builds only from commits on main, after the Linux and
   macOS checks pass, with its actions pinned to commits. The files are built
   in a job that can write nothing; a separate job, which runs only GitHub's
