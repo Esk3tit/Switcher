@@ -118,7 +118,7 @@ not run Switcher itself: `ssh -L 54545:127.0.0.1:54545 other-mac` for Claude
 
 ```sh
 ssh you@other-mac
-curl -fsSL https://raw.githubusercontent.com/00xmario/switcher/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Esk3tit/Switcher/main/install.sh | sh
 
 # Use your main Mac's accounts: no sign-ins needed on this Mac.
 switcher connect studio.local --code K7QF-M2XP-9WDH    # code from: switcher share code

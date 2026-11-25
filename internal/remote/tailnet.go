@@ -20,13 +20,14 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"switcher/internal/fork"
 	"sync"
 	"time"
 )
 
 // The "Away from home" add-on: Switcher downloads switcher-tailnet only when
 // the user turns it on, so the app itself carries no Tailscale code.
-const tailnetRelease = "https://github.com/00xmario/switcher/releases/download"
+const tailnetRelease = "https://github.com/" + fork.Repo + "/releases/download"
 
 // addonSHA256 is the released add-on's digest for this build's platform, set
 // by the release workflow with -ldflags. Release builds trust only this; other

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs or updates Switcher on this Mac or Linux computer, also over SSH:
 #
-#   curl -fsSL https://raw.githubusercontent.com/00xmario/switcher/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Esk3tit/Switcher/main/install.sh | sh
 #
 # It downloads the latest release over HTTPS only and installs nothing that
 # does not match the release's checksums, signed with Switcher's release key
@@ -14,7 +14,8 @@
 # that are still in flight.
 set -eu
 
-repo=00xmario/switcher
+# The fork whose releases this installs: internal/fork.Repo.
+repo=Esk3tit/Switcher
 # Where releases come from; tests point it at a local copy.
 releases=${SWITCHER_RELEASES:-https://github.com/$repo/releases}
 
@@ -85,11 +86,12 @@ check_tag() {
 	esac
 }
 
-# The keys Switcher's releases are signed with, in ssh-keygen's
-# allowed_signers form: the one releases are signed with, and one kept
-# offline in case that one is lost. See build/release-sign.sh.
-release_signers='switcher-release namespaces="switcher-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO2UJMe8yL/18YTufkesQEr9AjT32/Z8JzvCgtKjvya0 switcher-release-1
-switcher-release namespaces="switcher-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINkxLFXWXQDLvgFD+nK2tMMikz25kdCf3rh1W9F4Cmzp switcher-release-2'
+# The keys the fork's releases are signed with, in ssh-keygen's
+# allowed_signers form: the one the Release workflow signs with, and one kept
+# offline in case that one is lost. The same as internal/fork.ReleaseKeys;
+# build/fork-release-key.sh writes both.
+release_signers='switcher-release namespaces="switcher-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICJzT3kkppYEpDMzEvTM1VFj5DZvvn4ZCNoc77Z+pEc3 switcher-fork-release-1
+switcher-release namespaces="switcher-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFg+mUrEJyJTPdzjMI39Glx3M2x0DVDWldfyaDMDNyop switcher-fork-release-2'
 
 # signed_checksum downloads the release's list of checksums and its
 # signature into $1, checks the signature, and leaves the one line for the

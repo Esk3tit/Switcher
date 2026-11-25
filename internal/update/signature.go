@@ -11,17 +11,18 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"switcher/internal/fork"
 )
 
 // A release is trusted only when its list of checksums, SHA256SUMS, carries
-// a signature by one of the keys below. The keys' private halves are kept
-// apart from GitHub, so neither a stolen GitHub token nor anyone else who
-// can change a release there can make an install take a build: the files
-// can be swapped, the signature cannot be made.
+// a signature by one of the keys below. In this fork the signing key is an
+// Actions secret, so whoever can change a release's files but cannot run the
+// Release workflow with its secrets cannot make an install take a build.
+// Upstream keeps its key apart from GitHub altogether; build/release-sign.sh
+// still signs that way, for a fork release left as a draft.
 //
 // The signature is OpenSSH's (ssh-keygen -Y sign -n switcher-release), so
-// install.sh checks the same file with ssh-keygen -Y verify. See
-// build/release-sign.sh for how a release is signed.
+// install.sh checks the same file with ssh-keygen -Y verify.
 const (
 	sumsName           = "SHA256SUMS"
 	signatureName      = "SHA256SUMS.sig"
@@ -36,10 +37,7 @@ const (
 // them.
 var releaseKeys = productionKeys
 
-var productionKeys = []string{
-	"AAAAC3NzaC1lZDI1NTE5AAAAIO2UJMe8yL/18YTufkesQEr9AjT32/Z8JzvCgtKjvya0", // switcher-release-1
-	"AAAAC3NzaC1lZDI1NTE5AAAAINkxLFXWXQDLvgFD+nK2tMMikz25kdCf3rh1W9F4Cmzp", // switcher-release-2, offline
-}
+var productionKeys = fork.ReleaseKeys
 
 var errUnsigned = errors.New("the release's checksums are not signed by Switcher's release key")
 

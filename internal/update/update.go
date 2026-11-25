@@ -26,13 +26,14 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"switcher/internal/fork"
 	"switcher/internal/reexec"
 	"sync"
 	"time"
 )
 
 // Repo is the GitHub slug the releases live in.
-const Repo = "00xmario/switcher"
+const Repo = fork.Repo
 
 // State carries the cached update check so the UI can render it.
 type State struct {
@@ -291,6 +292,7 @@ func normalizeReleaseTag(raw string) (string, error) {
 var (
 	releaseHost = "https://github.com"
 	apiHost     = "https://api.github.com"
+	versionURL  = releaseHost + "/" + Repo + "/releases/latest/download/VERSION"
 )
 
 func fetchMetadata(ctx context.Context) (string, error) {
@@ -356,6 +358,8 @@ func latestReleaseTag(ctx context.Context, client *http.Client) ([]byte, error) 
 // fetchReleaseMetadata exposes only the metadata I/O boundary to fixtures.
 // It tries the release API first, then reads and validates the whole VERSION
 // response, rejecting oversized content instead of accepting a prefix.
+// VERSION is the newest release's own file: the fork's tags carry a release
+// number that VERSION on main, upstream's, never has.
 func fetchReleaseMetadata(ctx context.Context, readTag func(context.Context) ([]byte, error), client *http.Client) (string, error) {
 	out, ghErr := readTag(ctx)
 	if ghErr == nil {
@@ -369,7 +373,7 @@ func fetchReleaseMetadata(ctx context.Context, readTag func(context.Context) ([]
 	if err := ctx.Err(); err != nil {
 		return "", errors.Join(ghErr, err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://raw.githubusercontent.com/"+Repo+"/main/VERSION", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, versionURL, nil)
 	if err != nil {
 		return "", errors.Join(ghErr, fmt.Errorf("VERSION fallback: %w", err))
 	}

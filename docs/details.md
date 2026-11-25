@@ -595,13 +595,15 @@ environment; a terminal-only override needs the CLI command. The first
 - Recovery copies of Claude Code logins (one per switch) are removed after
   30 days.
 - **Updates are signed.** A release's files are listed with their
-  checksums in `SHA256SUMS`, and that list is signed with Switcher's release
-  key, whose private half is kept away from GitHub. The updater and
-  `install.sh` install nothing whose list is not signed by that key (or by
-  a second one kept offline in case the first is lost), so whoever can
-  change a release on GitHub, with a stolen token say, still cannot get a
-  build installed. The updater downloads over HTTPS, follows redirects only
-  to GitHub's own hosts, and installs only a release newer than what runs.
+  checksums in `SHA256SUMS`, and that list is signed with this fork's
+  release key, which the fork's Release workflow holds as an Actions secret.
+  The updater and `install.sh` install nothing whose list is not signed by
+  that key (or by a second one kept offline in case the first is lost), so
+  whoever can change a release's files on GitHub, but cannot run that
+  workflow with its secrets, still cannot get a build installed. (Upstream
+  Switcher keeps its key away from GitHub altogether.) The updater
+  downloads over HTTPS, follows redirects only to GitHub's own hosts, and
+  installs only a release newer than what runs.
   `install.sh` downloads over HTTPS only, redirects included, bounds every
   download, and does not replace a newer installed version with an older
   release unless `SWITCHER_TAG` asks for one. The

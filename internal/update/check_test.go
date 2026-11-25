@@ -394,7 +394,7 @@ func TestFallbackVersionIsFullyReadAndValidatedBeforePublication(t *testing.T) {
 			c := New("0.5.5")
 			c.latest = "v0.5.6"
 			client := &http.Client{Transport: metadataTransport(func(r *http.Request) (*http.Response, error) {
-				if r.Method != http.MethodGet || r.URL.String() != "https://raw.githubusercontent.com/"+Repo+"/main/VERSION" {
+				if r.Method != http.MethodGet || r.URL.String() != "https://github.com/"+Repo+"/releases/latest/download/VERSION" {
 					t.Errorf("unexpected metadata request: %s %s", r.Method, r.URL)
 				}
 				return &http.Response{StatusCode: tc.code, Body: io.NopCloser(chunkedVersionReader{strings.NewReader(tc.body)})}, nil

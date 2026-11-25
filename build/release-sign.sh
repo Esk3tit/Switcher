@@ -1,12 +1,14 @@
 #!/bin/sh
 # Signs and publishes a release that the Release workflow left as a draft:
 #
-#   build/release-sign.sh v1.31.0 <commit>
+#   build/release-sign.sh v1.40.0.1 <commit>
 #
 # <commit> is the commit you tagged, as you merged it: the release must be
-# built from it. The release key's private half is kept apart from GitHub,
-# in ~/.config/switcher-release/release-1 (SWITCHER_RELEASE_KEY names
-# another), so whoever can change a release on GitHub cannot sign one; this
+# built from it. The Release workflow leaves a draft when the fork has no
+# SWITCHER_RELEASE_SIGNING_KEY secret. A release key made by
+# build/fork-release-key.sh is in ~/.config/switcher-release/fork-1
+# (SWITCHER_RELEASE_KEY names another, such as fork-2), apart from GitHub,
+# so whoever can change a release on GitHub cannot sign one; this
 # script is what makes sure it signs only what was built from <commit>:
 #
 # - the tag is <commit>, here and on GitHub, and <commit> is on main;
@@ -25,16 +27,17 @@
 # trusts, uploads the list and its signature, and publishes.
 set -eu
 
-repo=00xmario/Switcher
+# The fork whose releases this signs: internal/fork.Repo.
+repo=Esk3tit/Switcher
 workflow=$repo/.github/workflows/release.yml
-key=${SWITCHER_RELEASE_KEY:-$HOME/.config/switcher-release/release-1}
+key=${SWITCHER_RELEASE_KEY:-$HOME/.config/switcher-release/fork-1}
 
 fail() {
 	echo "release-sign: $*" >&2
 	exit 1
 }
 
-[ $# = 2 ] || fail "usage: build/release-sign.sh vX.Y.Z <commit>"
+[ $# = 2 ] || fail "usage: build/release-sign.sh vX.Y.Z.N <commit>"
 tag=$1 commit=$2
 case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) fail "unexpected tag $tag" ;; esac
 case "${tag#v}" in *[!0-9.]*) fail "unexpected tag $tag" ;; esac
@@ -73,9 +76,10 @@ artifacts="Switcher_$version.dmg Install-Switcher.dmg"
 for target in darwin_arm64 darwin_amd64 linux_amd64 linux_arm64; do
 	artifacts="$artifacts switcher-server_${version}_$target switcher-tailnet_${version}_$target"
 done
-expected=$( (for f in $artifacts; do echo "$f"; echo "$f.sha256"; done; echo SHA256SUMS) | sort)
+expected=$( (for f in $artifacts; do echo "$f"; echo "$f.sha256"; done; echo SHA256SUMS; echo VERSION) | sort)
 present=$(ls "$work/dl" | grep -vx SHA256SUMS.sig | sort)
 [ "$present" = "$expected" ] || fail "$tag does not hold exactly the files the workflow makes"
+[ "$(cat "$work/dl/VERSION")" = "$version" ] || fail "$tag's VERSION is not $version"
 
 # The files that build the same everywhere, built again here from the
 # commit with the toolchain go.mod names, must be identical.

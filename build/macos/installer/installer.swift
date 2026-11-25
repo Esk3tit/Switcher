@@ -13,7 +13,7 @@ import WebKit
 
 let switcherBundleID = "sh.switcher.app"
 let launchAgentLabel = "sh.switcher.app"
-let repoURL = URL(string: "https://github.com/00xmario/switcher#readme")!
+let repoURL = URL(string: "https://github.com/Esk3tit/Switcher#readme")!
 let dashboardURL = URL(string: "http://127.0.0.1:8787/")!
 
 // MARK: - Running commands
