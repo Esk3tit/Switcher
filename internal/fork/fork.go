@@ -37,4 +37,7 @@ var UpstreamVersion string
 // that one be lost. build/fork-release-key.sh makes both and writes them here
 // and into install.sh. Until it has, no release verifies and the Release
 // workflow refuses to publish one.
-var ReleaseKeys = []string{}
+var ReleaseKeys = []string{
+	"AAAAC3NzaC1lZDI1NTE5AAAAIKonENo6gvjdBAAOoGsdJ78Lq6rly8jE31eAvUcy6h7a", // switcher-fork-release-1, the Release workflow signs with it
+	"AAAAC3NzaC1lZDI1NTE5AAAAIIfg2cyArWkCh5EL3MPTPCoccxxpBAQQwdFa1fGnfTZJ", // switcher-fork-release-2, offline
+}
