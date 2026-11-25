@@ -63,16 +63,6 @@ func TestTheHostsVersionIsOnlyEverAVersion(t *testing.T) {
 	if u.Current != "" || u.Latest != "" || u.Available || u.Install != nil {
 		t.Fatalf("sanitized: %+v", u)
 	}
-	u = HostUpdate{Current: "1.40.0.1", Latest: "v1.40.0.2", Available: true, Remote: true}
-	u.sanitize()
-	if u.Current != "1.40.0.1" || u.Latest != "v1.40.0.2" || !u.Available || !u.Remote {
-		t.Fatalf("a fork release was dropped: %+v", u)
-	}
-	for version, want := range map[string]bool{"1.40.0.1": true, "v1.21.0.1": true, "1.21.0": true, "1.20.9.9": false, "1.40": false, "1.40.0.1.2": false} {
-		if atLeast(version, remoteUpdateSince) != want {
-			t.Errorf("atLeast(%s, %s) is not %v", version, remoteUpdateSince, want)
-		}
-	}
 	u = HostUpdate{Install: &HostUpdateSteps{Step: "downloading", Fraction: 3}}
 	u.sanitize()
 	if u.Install == nil || u.Install.Fraction != 1 {
@@ -146,6 +136,37 @@ func TestTheStateCarriesTheHostsUpdateCleaned(t *testing.T) {
 	}
 	if _, err := client.HostUpdate(context.Background(), "install"); err == nil {
 		t.Fatal("a second install started while the first runs")
+	}
+}
+
+// A fork's host numbers its releases apart from upstream's (1.0.0 and on):
+// whether it takes updates from here goes by the upstream release it is
+// based on, and an upstream host without one by its own version.
+func TestAForkHostIsJudgedByItsUpstreamBase(t *testing.T) {
+	for _, c := range []struct {
+		version, upstream string
+		remote            bool
+	}{
+		{"1.0.0", "1.40.0", true},
+		{"1.3.2", "1.21.0", true},
+		{"1.30.0", "1.20.0", false},
+		{"1.0.0", "", false},
+		{"1.40.0", "", true},
+		{"1.0.0", "<b>1.40.0</b>", false},
+	} {
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/state" {
+				state := map[string]any{"version": c.version, "accounts": []any{}, "active": map[string]any{}}
+				if c.upstream != "" {
+					state["upstream_version"] = c.upstream
+				}
+				json.NewEncoder(w).Encode(state)
+			}
+		})
+		_, client := pairedWith(t, next)
+		if state := hostState(t, client); state.Current != c.version || state.Remote != c.remote {
+			t.Errorf("host %s on upstream %q: %+v", c.version, c.upstream, state)
+		}
 	}
 }
 

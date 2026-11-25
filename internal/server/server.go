@@ -24,6 +24,7 @@ import (
 	"switcher/internal/codexcfg"
 	"switcher/internal/config"
 	"switcher/internal/desktoprelay"
+	"switcher/internal/fork"
 	"switcher/internal/handback"
 	"switcher/internal/login"
 	"switcher/internal/phone"
@@ -765,6 +766,9 @@ func (a *API) LocalStateFields(r *http.Request) map[string]any {
 		"desktop_relay":       a.desktopRelayStatus(),
 		"platform":            runtime.GOOS,
 		"handed_back":         a.handedBack(),
+	}
+	if fork.UpstreamVersion != "" {
+		fields["upstream_version"] = fork.UpstreamVersion
 	}
 	if state, ok := a.awakeState(); ok {
 		fields["awake"] = state
