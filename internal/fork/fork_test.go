@@ -69,3 +69,35 @@ func TestScriptsNameTheFork(t *testing.T) {
 		}
 	}
 }
+
+// Builds and releases take the fork's own number, FORK_VERSION, not
+// upstream's VERSION, and tag it with TagPrefix; the Mac app names the
+// fork, which tells installers its number from upstream's.
+func TestBuildsUseTheForkVersion(t *testing.T) {
+	read := func(file string) string {
+		body, err := os.ReadFile(filepath.Join(root, file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(body)
+	}
+	if v := strings.TrimSpace(read("FORK_VERSION")); !regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`).MatchString(v) {
+		t.Errorf("FORK_VERSION is %q, not X.Y.Z", v)
+	}
+	for file, want := range map[string]string{
+		"Makefile":                           "VERSION ?= $(shell cat FORK_VERSION",
+		"install.sh":                         "\ntag_prefix=" + TagPrefix + "\n",
+		"build/release-sign.sh":              "version=${tag#" + TagPrefix + "}",
+		".github/workflows/release.yml":      "- '" + TagPrefix + "*'",
+		".github/workflows/checks.yml":       "VERSION=$(cat FORK_VERSION)",
+		"build/macos/Info.plist":             "<key>SwitcherReleaseRepo</key><string>" + Repo + "</string>",
+		".github/workflows/fork-release.yml": "build/fork-release.sh",
+	} {
+		if !strings.Contains(read(file), want) {
+			t.Errorf("%s lacks %q", file, want)
+		}
+	}
+	if got := ReleaseTag("v1.2.3"); got != TagPrefix+"1.2.3" {
+		t.Errorf("ReleaseTag(v1.2.3) = %q", got)
+	}
+}

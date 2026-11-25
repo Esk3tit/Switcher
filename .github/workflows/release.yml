@@ -1,13 +1,14 @@
 name: Release
 
-# The fork's releases are vX.Y.Z.N (build/fork-release.sh), so upstream's
-# vX.Y.Z tags, should a sync bring them along, release nothing here. The Fork
-# release workflow starts this one on the tag it made: a tag pushed with the
+# The fork numbers its releases on its own, in FORK_VERSION (VERSION is
+# upstream's), and tags them fork-vX.Y.Z: the fork's repository also holds
+# upstream's vX.Y.Z tags, which release nothing here. The Fork release
+# workflow starts this one on the tag it made: a tag pushed with the
 # workflow token starts no workflow by itself.
 on:
   push:
     tags:
-      - 'v*.*.*.*'
+      - 'fork-v*'
   workflow_dispatch:
 
 # Only the release job may write, and only releases. Actions are pinned to
@@ -20,10 +21,13 @@ jobs:
   # login service are native. The release waits for them.
   verify-linux:
     runs-on: ubuntu-24.04
+    outputs:
+      upstream-version: ${{ steps.upstream.outputs.version }}
+      upstream-commit: ${{ steps.upstream.outputs.commit }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Go
@@ -31,17 +35,35 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # vX.Y.Z.N for upstream's X.Y.Z, as VERSION names it, and a tag: run
-      # by hand on a branch, nothing is released.
-      - name: Release only a fork tag of VERSION
+      # fork-vX.Y.Z for FORK_VERSION's X.Y.Z, and a tag: run by hand on a
+      # branch, nothing is released.
+      - name: Release only the tag of FORK_VERSION
         run: |
           set -euo pipefail
-          base=$(cat VERSION)
+          version=$(cat FORK_VERSION)
           case "$GITHUB_REF" in refs/tags/*) ;; *) echo "$GITHUB_REF is not a tag; nothing is released." >&2; exit 1 ;; esac
-          n="${GITHUB_REF_NAME#"v$base."}"
-          case "$n" in
-            "$GITHUB_REF_NAME" | "" | *[!0-9]* | 0*) echo "The tag $GITHUB_REF_NAME is not v$base.N; nothing is released." >&2; exit 1 ;;
-          esac
+          if ! printf '%s\n' "$version" | grep -Eqx '(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'; then
+            echo "FORK_VERSION is not X.Y.Z: $version" >&2
+            exit 1
+          fi
+          if [ "$GITHUB_REF_NAME" != "fork-v$version" ]; then
+            echo "The tag $GITHUB_REF_NAME is not fork-v$version, which FORK_VERSION names; nothing is released." >&2
+            exit 1
+          fi
+
+      # The upstream commit this release is built on: the newest one of
+      # upstream's main that the tagged commit holds, and the VERSION there.
+      - name: Find the upstream base
+        id: upstream
+        run: |
+          set -euo pipefail
+          git fetch --quiet --no-tags https://github.com/00xmario/Switcher.git main
+          commit=$(git merge-base HEAD FETCH_HEAD)
+          version=$(git show "$commit:VERSION")
+          printf '%s\n' "$version" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+'
+          echo "Upstream base: Switcher $version, commit $commit"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       # A release is built only from a commit that is on main: a tag on any
       # other commit, such as a branch nobody reviewed, releases nothing.
@@ -109,7 +131,7 @@ jobs:
       - name: Build plain binaries
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${GITHUB_REF_NAME#fork-v}"
           mkdir -p dist
           # The optional "Away from home" Tailscale add-on, downloaded by
           # Switcher only when a user turns it on. Its digest is built into
@@ -143,7 +165,7 @@ jobs:
       - name: Build macOS app bundle
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${GITHUB_REF_NAME#fork-v}"
           APP="build/Switcher.app"
           rm -rf "$APP"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -179,7 +201,7 @@ jobs:
       - name: Package drag-to-Applications DMG
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${GITHUB_REF_NAME#fork-v}"
           STAGE="build/dmg"
           rm -rf "$STAGE"
           mkdir -p "$STAGE"
@@ -202,13 +224,13 @@ jobs:
       - name: Build the installer disk image
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${GITHUB_REF_NAME#fork-v}"
           build/macos/installer/build.sh "$VERSION" build/Switcher.app dist/Install-Switcher.dmg
 
       - name: Checksum DMG
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${GITHUB_REF_NAME#fork-v}"
           # Releases before 1.31 check the DMG against this.
           cd dist
           shasum -a 256 "Switcher_${VERSION}.dmg" | tee "Switcher_${VERSION}.dmg.sha256"
@@ -223,7 +245,7 @@ jobs:
           retention-days: 1
 
   release:
-    needs: [build]
+    needs: [verify-linux, build]
     runs-on: ubuntu-24.04
     # Writes the release, and GitHub's attestations of where each file was
     # built, which build/release-sign.sh checks before it signs. It runs
@@ -242,7 +264,7 @@ jobs:
       # The release's version, which the updater reads from the newest
       # release when the release API refuses it.
       - name: Name the version
-        run: printf '%s\n' "${GITHUB_REF_NAME#v}" > dist/VERSION
+        run: printf '%s\n' "${GITHUB_REF_NAME#fork-v}" > dist/VERSION
 
       # One list of every file's checksum. The release is signed by signing
       # this list; updaters and install.sh from 1.31 trust nothing else.
@@ -310,9 +332,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SIGNED: ${{ steps.sign.outputs.signed }}
+          UPSTREAM_VERSION: ${{ needs.verify-linux.outputs.upstream-version }}
+          UPSTREAM_COMMIT: ${{ needs.verify-linux.outputs.upstream-commit }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${GITHUB_REF_NAME#fork-v}"
           if [ "$SIGNED" = true ]; then
             publish=(--latest)
           else
@@ -323,5 +347,5 @@ jobs:
             --verify-tag \
             "${publish[@]}" \
             --title "$GITHUB_REF_NAME" \
-            --notes "Switcher $VERSION: upstream Switcher ${VERSION%.*} with this fork's changes." \
+            --notes "Switcher $VERSION, this fork's release. Upstream base: Switcher $UPSTREAM_VERSION, 00xmario/Switcher commit \`$UPSTREAM_COMMIT\`." \
             --generate-notes

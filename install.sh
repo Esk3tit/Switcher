@@ -14,8 +14,11 @@
 # that are still in flight.
 set -eu
 
-# The fork whose releases this installs: internal/fork.Repo.
+# The fork whose releases this installs: internal/fork.Repo. Its release
+# tags are fork-vX.Y.Z (internal/fork.TagPrefix): the fork numbers its
+# releases on its own, from 1.0.0.
 repo=Esk3tit/Switcher
+tag_prefix=fork-v
 # Where releases come from; tests point it at a local copy.
 releases=${SWITCHER_RELEASES:-https://github.com/$repo/releases}
 
@@ -74,14 +77,14 @@ no_downgrade() {
 	fi
 }
 
-# A release tag is vX.Y.Z and nothing else: it becomes part of file names
-# and addresses.
+# A release tag is fork-vX.Y.Z and nothing else: it becomes part of file
+# names and addresses.
 check_tag() {
 	case "$1" in
-	v[0-9]*) ;;
+	"$tag_prefix"[0-9]*) ;;
 	*) fail "Unexpected release name: $1" ;;
 	esac
-	case "${1#v}" in
+	case "${1#"$tag_prefix"}" in
 	*[!0-9.]* | *..* | .* | *.) fail "Unexpected release name: $1" ;;
 	esac
 }
@@ -138,7 +141,10 @@ stop_switcher() {
 
 latest_tag() {
 	if [ -n "${SWITCHER_TAG:-}" ]; then
-		echo "$SWITCHER_TAG"
+		case "$SWITCHER_TAG" in
+		"$tag_prefix"*) echo "$SWITCHER_TAG" ;;
+		*) echo "$tag_prefix${SWITCHER_TAG#v}" ;;
+		esac
 		return
 	fi
 	curl --proto '=https' --proto-redir '=https' --tlsv1.2 --max-filesize 1048576 -fsSL "https://api.github.com/repos/$repo/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1
@@ -182,7 +188,7 @@ install_linux() {
 	tag=$(latest_tag)
 	[ -n "$tag" ] || fail "Could not find the latest Switcher release."
 	check_tag "$tag"
-	version=${tag#v}
+	version=${tag#"$tag_prefix"}
 	asset="switcher-server_${version}_linux_$arch"
 	bin="$HOME/.local/bin"
 	installed=
@@ -246,7 +252,7 @@ main() {
 	tag=$(latest_tag)
 	[ -n "$tag" ] || fail "Could not find the latest Switcher release."
 	check_tag "$tag"
-	version=${tag#v}
+	version=${tag#"$tag_prefix"}
 	dmg="Switcher_$version.dmg"
 	installed=
 	for app in /Applications/Switcher.app "$HOME/Applications/Switcher.app"; do

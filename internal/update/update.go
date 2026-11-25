@@ -88,10 +88,9 @@ type metadataCall struct {
 	err   error
 }
 
-// validTag accepts only release tags of the form vX.Y.Z, or vX.Y.Z.N for the
-// fork's Nth release of upstream X.Y.Z, so a hostile release tag never
-// reaches a download URL or a file name.
-var validTag = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$`)
+// validTag accepts only release tags of the form vX.Y.Z, so a hostile
+// release tag never reaches a download URL or a file name.
+var validTag = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+$`)
 
 // New creates a checker for the running version.
 func New(current string) *Checker { return &Checker{Current: current} }
@@ -282,9 +281,20 @@ func (c *Checker) Refresh() {
 func normalizeReleaseTag(raw string) (string, error) {
 	tag := strings.TrimSpace(raw)
 	if !validTag.MatchString(tag) {
-		return "", errors.New("invalid release version tag; expected vX.Y.Z or vX.Y.Z.N")
+		return "", errors.New("invalid release version tag; expected vX.Y.Z")
 	}
 	return "v" + strings.TrimPrefix(tag, "v"), nil
+}
+
+// releaseVersion is the version a fork release's tag names: fork-vX.Y.Z is
+// vX.Y.Z. Upstream's own vX.Y.Z tags, which the fork's repository carries
+// too, name no fork release.
+func releaseVersion(tag string) (string, error) {
+	tag = strings.TrimSpace(tag)
+	if !strings.HasPrefix(tag, fork.TagPrefix) {
+		return "", fmt.Errorf("release tag %q is not %sX.Y.Z", tag, fork.TagPrefix)
+	}
+	return normalizeReleaseTag("v" + strings.TrimPrefix(tag, fork.TagPrefix))
 }
 
 // releaseHost serves the release pages and assets; apiHost answers the
@@ -358,13 +368,13 @@ func latestReleaseTag(ctx context.Context, client *http.Client) ([]byte, error) 
 // fetchReleaseMetadata exposes only the metadata I/O boundary to fixtures.
 // It tries the release API first, then reads and validates the whole VERSION
 // response, rejecting oversized content instead of accepting a prefix.
-// VERSION is the newest release's own file: the fork's tags carry a release
-// number that VERSION on main, upstream's, never has.
+// VERSION is the newest release's own file, its fork version: VERSION on
+// main is upstream's.
 func fetchReleaseMetadata(ctx context.Context, readTag func(context.Context) ([]byte, error), client *http.Client) (string, error) {
 	out, ghErr := readTag(ctx)
 	if ghErr == nil {
 		var tag string
-		tag, ghErr = normalizeReleaseTag(string(out))
+		tag, ghErr = releaseVersion(string(out))
 		if ghErr == nil {
 			return tag, nil
 		}
@@ -406,9 +416,7 @@ func (c *Checker) Latest() string {
 	return c.latest
 }
 
-// compare returns >0 when a is newer than b (semver-ish, v tolerated). A
-// missing part counts as 0, so the fork's 1.40.0.1 is newer than upstream's
-// 1.40.0 and older than 1.41.0.
+// compare returns >0 when a is newer than b (semver-ish, v tolerated).
 func compare(a, b string) int {
 	a, b = strings.TrimPrefix(a, "v"), strings.TrimPrefix(b, "v")
 	if a == b {
@@ -548,7 +556,7 @@ func downloadRelease(ctx context.Context, tag, asset, dir string, limit int64, p
 	}
 	client := &http.Client{CheckRedirect: releaseRedirect}
 	for _, name := range []string{sumsName, signatureName, asset} {
-		url := releaseHost + "/" + Repo + "/releases/download/" + tag + "/" + name
+		url := releaseHost + "/" + Repo + "/releases/download/" + fork.ReleaseTag(tag) + "/" + name
 		var report func(done, total int64)
 		size := int64(sumsLimit)
 		switch name {

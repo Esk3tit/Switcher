@@ -744,7 +744,7 @@ func (t *Tailnet) fetch(ctx context.Context, dest string) error {
 		return errors.New("the Tailscale add-on is only available for released versions")
 	}
 	asset := fmt.Sprintf("switcher-tailnet_%s_%s_%s", t.version, runtime.GOOS, runtime.GOARCH)
-	base := fmt.Sprintf("%s/v%s/%s", tailnetRelease, t.version, asset)
+	base := fmt.Sprintf("%s/%s/%s", tailnetRelease, fork.ReleaseTag(t.version), asset)
 	get := func(url string, limit int64) ([]byte, error) {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		resp, err := (&http.Client{}).Do(req)

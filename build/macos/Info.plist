@@ -7,6 +7,7 @@
 	<key>CFBundleIdentifier</key><string>sh.switcher.app</string>
 	<key>CFBundleVersion</key><string>VERSION_TOKEN</string>
 	<key>CFBundleShortVersionString</key><string>VERSION_TOKEN</string>
+	<key>SwitcherReleaseRepo</key><string>Esk3tit/Switcher</string>
 	<key>CFBundleExecutable</key><string>Switcher</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>LSUIElement</key><true/>

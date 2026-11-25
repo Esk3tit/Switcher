@@ -373,8 +373,8 @@ func TestLatestReleaseFromTheAPIThenTheReleasesPage(t *testing.T) {
 		want     string
 		wantErr  bool
 	}{
-		{"api", 200, "", "v1.12.0", false},
-		{"rate limited", 403, "/" + Repo + "/releases/tag/v1.13.0", "v1.13.0", false},
+		{"api", 200, "", "fork-v1.12.0", false},
+		{"rate limited", 403, "/" + Repo + "/releases/tag/fork-v1.13.0", "fork-v1.13.0", false},
 		{"neither", 403, "/" + Repo + "/releases", "", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -385,7 +385,7 @@ func TestLatestReleaseFromTheAPIThenTheReleasesPage(t *testing.T) {
 				switch r.URL.Path {
 				case "/repos/" + Repo + "/releases/latest":
 					w.WriteHeader(tc.apiCode)
-					_, _ = w.Write([]byte(`{"tag_name":"v1.12.0","assets":[]}`))
+					_, _ = w.Write([]byte(`{"tag_name":"fork-v1.12.0","assets":[]}`))
 				case "/" + Repo + "/releases/latest":
 					http.Redirect(w, r, tc.location, http.StatusFound)
 				default:
@@ -403,11 +403,11 @@ func TestLatestReleaseFromTheAPIThenTheReleasesPage(t *testing.T) {
 func TestDownloadReleaseFetchesAssetAndChecksum(t *testing.T) {
 	withReleaseServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/" + Repo + "/releases/download/v1.12.0/Switcher_1.12.0.dmg":
+		case "/" + Repo + "/releases/download/fork-v1.12.0/Switcher_1.12.0.dmg":
 			_, _ = w.Write([]byte("image"))
-		case "/" + Repo + "/releases/download/v1.12.0/" + sumsName:
+		case "/" + Repo + "/releases/download/fork-v1.12.0/" + sumsName:
 			_, _ = w.Write([]byte("sum"))
-		case "/" + Repo + "/releases/download/v1.12.0/" + signatureName:
+		case "/" + Repo + "/releases/download/fork-v1.12.0/" + signatureName:
 			_, _ = w.Write([]byte("sig"))
 		default:
 			http.NotFound(w, r)

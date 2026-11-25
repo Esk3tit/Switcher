@@ -422,8 +422,11 @@ func TestReleaseMetadataPrefersValidTagAndFallsBackOnMalformedTag(t *testing.T) 
 		want      string
 		wantCalls int
 	}{
-		{"v0.5.7\n", "v0.5.7", 0},
+		{"fork-v0.5.7\n", "v0.5.7", 0},
 		{"not-a-release", "v0.5.8", 1},
+		// Upstream's own tag names no fork release.
+		{"v0.5.7", "v0.5.8", 1},
+		{"fork-vv0.5.7", "v0.5.8", 1},
 	} {
 		t.Run(tc.tag, func(t *testing.T) {
 			c := New("0.5.5")

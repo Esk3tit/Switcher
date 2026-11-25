@@ -1,7 +1,7 @@
 #!/bin/sh
 # Signs and publishes a release that the Release workflow left as a draft:
 #
-#   build/release-sign.sh v1.40.0.1 <commit>
+#   build/release-sign.sh fork-v1.0.0 <commit>
 #
 # <commit> is the commit you tagged, as you merged it: the release must be
 # built from it. The Release workflow leaves a draft when the fork has no
@@ -37,13 +37,13 @@ fail() {
 	exit 1
 }
 
-[ $# = 2 ] || fail "usage: build/release-sign.sh vX.Y.Z.N <commit>"
+[ $# = 2 ] || fail "usage: build/release-sign.sh fork-vX.Y.Z <commit>"
 tag=$1 commit=$2
-case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) fail "unexpected tag $tag" ;; esac
-case "${tag#v}" in *[!0-9.]*) fail "unexpected tag $tag" ;; esac
+case "$tag" in fork-v[0-9]*.[0-9]*.[0-9]*) ;; *) fail "unexpected tag $tag" ;; esac
+case "${tag#fork-v}" in *[!0-9.]* | *.*.*.*) fail "unexpected tag $tag" ;; esac
 case "$commit" in *[!0-9a-f]*) fail "the commit must be its full id" ;; esac
 [ ${#commit} = 40 ] || fail "the commit must be its full id"
-version=${tag#v}
+version=${tag#fork-v}
 case "$key" in /*) ;; *) key=$(pwd)/$key ;; esac
 [ -r "$key" ] || fail "no release key at $key"
 cd "$(dirname "$0")/.."

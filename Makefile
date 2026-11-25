@@ -1,5 +1,6 @@
 BINARY := switcher
-VERSION ?= $(shell cat VERSION 2>/dev/null || echo dev)
+# The fork's own release number; VERSION is upstream's.
+VERSION ?= $(shell cat FORK_VERSION 2>/dev/null || echo dev)
 
 .PHONY: build test test-usage-update vet verify verify-common verify-linux cross-build cgo-build benchmark-menu showcase-menu install run dev clean
 
