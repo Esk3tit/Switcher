@@ -1,24 +1,36 @@
 name: Fork release
 
-# Tags main as the fork's next release and starts the Release workflow on the
-# tag. After a push to main it does so only when the push brought in upstream
-# commits the newest fork release lacks, as merging an upstream sync does;
-# run by hand, it releases main as it is. build/fork-release.sh decides, and
-# picks the tag: vX.Y.Z.N, the Nth fork release of upstream's VERSION X.Y.Z.
+# Releases main as the fork's next version and starts the Release workflow on
+# its tag. The fork numbers its releases on its own, X.Y.Z in FORK_VERSION,
+# tagged fork-vX.Y.Z; build/fork-release.sh decides and picks the number.
+#
+# After a push to main it releases only when the push brought in upstream
+# commits the newest fork release lacks, as merging an upstream sync does,
+# and as a patch release. Run by hand, it releases main as it is, as a patch
+# or a minor release (a minor one adds or changes the fork's own features).
+# The first release, 1.0.0, is run by hand.
+#
+# When the number is raised here, the new FORK_VERSION is committed to main
+# first, so the tagged commit names its own version.
 on:
   push:
     branches: [main]
   workflow_dispatch:
     inputs:
+      bump:
+        description: Which number to raise, unless FORK_VERSION is ahead of the newest release already
+        type: choice
+        options: [patch, minor]
+        default: patch
       dry_run:
-        description: Only say which tag would be released
+        description: Only say which version would be released
         type: boolean
         default: false
 
 permissions:
   contents: read
 
-# One at a time, so two pushes never pick the same tag.
+# One at a time, so two pushes never pick the same version.
 concurrency:
   group: fork-release
   cancel-in-progress: false
@@ -30,7 +42,7 @@ jobs:
   tag:
     runs-on: ubuntu-24.04
     permissions:
-      contents: write # the tag
+      contents: write # FORK_VERSION on main, and the tag
       actions: write # starting the Release workflow
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -40,13 +52,14 @@ jobs:
           fetch-tags: true
           persist-credentials: false
 
-      # Read only, anonymously: whether this push merged upstream commits.
+      # Read only, anonymously: which upstream commits main holds.
       - name: Fetch upstream
-        if: github.event_name == 'push'
         run: git fetch --no-tags --quiet "$UPSTREAM_URL" main:refs/remotes/upstream/main
 
       - name: Decide
         id: plan
+        env:
+          BUMP: ${{ inputs.bump }}
         run: |
           set -euo pipefail
           if [ "$GITHUB_REF" != refs/heads/main ]; then
@@ -56,29 +69,57 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             build/fork-release.sh auto refs/remotes/upstream/main
           else
-            build/fork-release.sh dispatch
+            build/fork-release.sh "$BUMP" refs/remotes/upstream/main
           fi
+
+      # A commit pushed with the workflow token starts no workflow, this one
+      # included. If main moved since this run began, the push fails and
+      # nothing is released; run it again.
+      - name: Commit the version to main
+        id: commit
+        if: steps.plan.outputs.release == 'true' && !inputs.dry_run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.plan.outputs.commit }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          UPSTREAM_VERSION: ${{ steps.plan.outputs.upstream_version }}
+        run: |
+          set -euo pipefail
+          if [ "$COMMIT" = true ]; then
+            printf '%s\n' "$VERSION" > FORK_VERSION
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit --quiet -m "Release fork v$VERSION: upstream Switcher $UPSTREAM_VERSION" FORK_VERSION
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+              push --quiet origin "HEAD:refs/heads/main"
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Tag and release
         if: steps.plan.outputs.release == 'true' && !inputs.dry_run
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.plan.outputs.tag }}
+          SHA: ${{ steps.commit.outputs.sha }}
         run: |
           set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA" > /dev/null
           gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
-          echo "Tagged $GITHUB_SHA as $TAG and started the Release workflow on it." >> "$GITHUB_STEP_SUMMARY"
+          echo "Tagged $SHA as $TAG and started the Release workflow on it." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Say what was decided
         env:
           RELEASE: ${{ steps.plan.outputs.release }}
           TAG: ${{ steps.plan.outputs.tag }}
+          COMMIT: ${{ steps.plan.outputs.commit }}
+          UPSTREAM_VERSION: ${{ steps.plan.outputs.upstream_version }}
+          UPSTREAM_COMMIT: ${{ steps.plan.outputs.upstream_commit }}
           REASON: ${{ steps.plan.outputs.reason }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           if [ "$RELEASE" != true ]; then
             echo "Not released: $REASON." >> "$GITHUB_STEP_SUMMARY"
           elif [ "$DRY_RUN" = true ]; then
-            echo "Dry run: would tag $GITHUB_SHA as $TAG ($REASON)." >> "$GITHUB_STEP_SUMMARY"
+            what="tag $GITHUB_SHA"
+            if [ "$COMMIT" = true ]; then what="commit FORK_VERSION to main and tag that"; fi
+            echo "Dry run: would $what as $TAG ($REASON), on upstream Switcher $UPSTREAM_VERSION (\`$UPSTREAM_COMMIT\`)." >> "$GITHUB_STEP_SUMMARY"
           fi
