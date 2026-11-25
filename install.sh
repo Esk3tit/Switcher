@@ -69,7 +69,8 @@ newer_than() {
 
 # no_downgrade refuses to replace installed version $1 with an older one:
 # an older release can have flaws a newer one fixed. SWITCHER_TAG, set by
-# you, installs the release it names all the same.
+# you, installs the release it names all the same. $1 is empty for a
+# Switcher that is not this fork's (see other_line).
 no_downgrade() {
 	[ -n "$1" ] && [ -z "${SWITCHER_TAG:-}" ] || return 0
 	if newer_than "$1" "$version"; then
@@ -117,6 +118,14 @@ signed_checksum() {
 checksum_names() {
 	[ "$(awk 'END { print NR }' "$1")" = 1 ] || return 1
 	[ "$(awk '{ name = $2; sub(/^\*/, "", name); print name }' "$1")" = "$2" ]
+}
+
+# other_line says that the installed Switcher $1 is not one of this fork's
+# builds, whose versions are numbered on their own: upstream Switcher's are
+# 1.40.0 and on, this fork's start at 1.0.0. Replacing it is no downgrade.
+other_line() {
+	echo "Switcher $1 from another source is installed; it is replaced with this fork's Switcher $version ($repo)."
+	echo "Your accounts and settings stay as they are."
 }
 
 # stop_switcher quits the app in $1 and waits until it has exited.
@@ -194,6 +203,11 @@ install_linux() {
 	installed=
 	if [ -x "$bin/switcher" ]; then
 		installed=$("$bin/switcher" version 2>/dev/null | sed -n 's/^switcher \([0-9][0-9.]*\)$/\1/p' | head -n 1)
+		# This fork's builds carry its repository's name, to take its releases.
+		if [ -n "$installed" ] && ! grep -qF "$repo" "$bin/switcher"; then
+			other_line "$installed"
+			installed=
+		fi
 	fi
 	no_downgrade "$installed"
 
@@ -256,8 +270,15 @@ main() {
 	dmg="Switcher_$version.dmg"
 	installed=
 	for app in /Applications/Switcher.app "$HOME/Applications/Switcher.app"; do
-		[ -n "$installed" ] || [ ! -f "$app/Contents/Info.plist" ] ||
-			installed=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null | sed -n 's/^\([0-9][0-9.]*\)$/\1/p')
+		if [ -n "$installed" ] || [ ! -f "$app/Contents/Info.plist" ]; then
+			continue
+		fi
+		installed=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null | sed -n 's/^\([0-9][0-9.]*\)$/\1/p')
+		# This fork's apps name its repository in SwitcherReleaseRepo.
+		if [ -n "$installed" ] && [ "$(/usr/libexec/PlistBuddy -c 'Print :SwitcherReleaseRepo' "$app/Contents/Info.plist" 2>/dev/null)" != "$repo" ]; then
+			other_line "$installed"
+			installed=
+		fi
 	done
 	no_downgrade "$installed"
 

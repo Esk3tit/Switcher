@@ -76,6 +76,15 @@ func bundleVersion(_ app: URL) -> String? {
     return version
 }
 
+/// releaseRepo names the GitHub repository whose releases the app takes
+/// (SwitcherReleaseRepo); upstream Switcher's apps name none.
+func releaseRepo(_ app: URL) -> String? {
+    let plist = app.appendingPathComponent("Contents/Info.plist")
+    guard let data = try? Data(contentsOf: plist),
+          let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return nil }
+    return dict["SwitcherReleaseRepo"] as? String
+}
+
 func bundleID(_ app: URL) -> String? {
     let plist = app.appendingPathComponent("Contents/Info.plist")
     guard let data = try? Data(contentsOf: plist),
@@ -219,6 +228,12 @@ struct InstallError: Error {
 struct Existing {
     let url: URL
     let version: String
+    /// sameLine says the app takes the same releases as this installer's.
+    /// Another line's numbers say nothing about this one's (upstream
+    /// Switcher is at 1.40.0 and on, this fork starts at 1.0.0), so its app
+    /// counts as older than any release here.
+    var sameLine = true
+    var rank: String { sameLine ? version : "0" }
 }
 
 final class Installer {
@@ -250,8 +265,8 @@ final class Installer {
             guard bundleID(app) == switcherBundleID else { continue }
             // A Switcher whose version cannot be read (a development build)
             // counts as older than any release.
-            let found = Existing(url: app, version: bundleVersion(app) ?? "0")
-            if existing == nil || compareVersions(found.version, existing!.version) > 0 { existing = found }
+            let found = Existing(url: app, version: bundleVersion(app) ?? "0", sameLine: releaseRepo(app) == releaseRepo(payload))
+            if existing == nil || compareVersions(found.rank, existing!.rank) > 0 { existing = found }
         }
         running = !switcherProcesses().isEmpty
     }
@@ -260,7 +275,7 @@ final class Installer {
     /// the same version again, or a downgrade, which the installer refuses.
     var relation: String {
         guard let e = existing else { return "fresh" }
-        switch compareVersions(e.version, version) {
+        switch compareVersions(e.rank, version) {
         case ..<0: return "update"
         case 0: return "same"
         default: return "newer"

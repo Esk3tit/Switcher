@@ -84,7 +84,7 @@ grep -q 'step skill' "$work/same.log" && fail "a reinstall installed the skill a
 check_install
 
 echo "installer test: an update over an older Switcher that is running"
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.0.0" "$apps/Switcher.app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 0.0.1" "$apps/Switcher.app/Contents/Info.plist"
 # A stand-in for the running server: a process running the old app's
 # SwitcherServer as a server runs (with flags; a switcher command, which is
 # the same binary, is left alone), detached so that launchd, not this
@@ -125,6 +125,16 @@ cat "$work/newer.log"
 grep -q '"relation":"newer"' "$work/newer.log" || { cat "$work/newer.log"; fail "a newer install was not seen as newer"; }
 [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$apps/Switcher.app/Contents/Info.plist")" = 99.0.0 ] || fail "a newer Switcher was changed"
 
+echo "installer test: a Switcher of another release line is replaced"
+# Upstream Switcher's apps name no SwitcherReleaseRepo and number their
+# releases apart, so a higher number there is no newer Switcher.
+/usr/libexec/PlistBuddy -c "Delete :SwitcherReleaseRepo" "$apps/Switcher.app/Contents/Info.plist"
+bounded 180 "the switch of release line" "$exe" --install-test "$apps" "$home" "$bin" >"$work/line.log" 2>&1 || { cat "$work/line.log"; fail "replacing another line's Switcher failed"; }
+cat "$work/line.log"
+grep -q '"relation":"update"' "$work/line.log" || fail "another line's Switcher was not seen as older"
+check_install
+[ "$(/usr/libexec/PlistBuddy -c 'Print :SwitcherReleaseRepo' "$apps/Switcher.app/Contents/Info.plist")" = Esk3tit/Switcher ] || fail "the installed app names no release repository"
+
 echo "installer test: another app called Switcher.app is left alone"
 other="$work/Other"
 mkdir -p "$other/Switcher.app/Contents"
@@ -135,4 +145,4 @@ cat "$work/other.log"
 [ "$status" = 1 ] || fail "another app called Switcher.app did not stop the install ($status)"
 grep -q "com.example.switcher" "$other/Switcher.app/Contents/Info.plist" || fail "another app called Switcher.app was replaced"
 
-echo "installer test: passed (fresh, reinstall, update over a running app, newer left alone, another app left alone)"
+echo "installer test: passed (fresh, reinstall, update over a running app, newer left alone, another release line replaced, another app left alone)"
