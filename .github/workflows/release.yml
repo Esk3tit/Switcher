@@ -1,9 +1,14 @@
 name: Release
 
+# The fork's releases are vX.Y.Z.N (build/fork-release.sh), so upstream's
+# vX.Y.Z tags, should a sync bring them along, release nothing here. The Fork
+# release workflow starts this one on the tag it made: a tag pushed with the
+# workflow token starts no workflow by itself.
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*.*.*.*'
+  workflow_dispatch:
 
 # Only the release job may write, and only releases. Actions are pinned to
 # commits, so a moved tag cannot change what builds a release.
@@ -25,6 +30,18 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
+
+      # vX.Y.Z.N for upstream's X.Y.Z, as VERSION names it, and a tag: run
+      # by hand on a branch, nothing is released.
+      - name: Release only a fork tag of VERSION
+        run: |
+          set -euo pipefail
+          base=$(cat VERSION)
+          case "$GITHUB_REF" in refs/tags/*) ;; *) echo "$GITHUB_REF is not a tag; nothing is released." >&2; exit 1 ;; esac
+          n="${GITHUB_REF_NAME#"v$base."}"
+          case "$n" in
+            "$GITHUB_REF_NAME" | "" | *[!0-9]* | 0*) echo "The tag $GITHUB_REF_NAME is not v$base.N; nothing is released." >&2; exit 1 ;;
+          esac
 
       # A release is built only from a commit that is on main: a tag on any
       # other commit, such as a branch nobody reviewed, releases nothing.
@@ -208,9 +225,9 @@ jobs:
   release:
     needs: [build]
     runs-on: ubuntu-24.04
-    # Writes the draft release, and GitHub's attestations of where each file
-    # was built, which build/release-sign.sh checks before it signs. It runs
-    # only GitHub's own actions and tools.
+    # Writes the release, and GitHub's attestations of where each file was
+    # built, which build/release-sign.sh checks before it signs. It runs
+    # only GitHub's own actions and tools, and ssh-keygen to sign.
     permissions:
       contents: write
       id-token: write
@@ -222,16 +239,20 @@ jobs:
           name: release-files
           path: dist
 
+      # The release's version, which the updater reads from the newest
+      # release when the release API refuses it.
+      - name: Name the version
+        run: printf '%s\n' "${GITHUB_REF_NAME#v}" > dist/VERSION
+
       # One list of every file's checksum. The release is signed by signing
-      # this list, away from GitHub (build/release-sign.sh); updaters and
-      # install.sh from 1.31 trust nothing else.
+      # this list; updaters and install.sh from 1.31 trust nothing else.
       - name: List checksums
         run: |
           set -euo pipefail
           cd dist
           for f in *; do
             case "$f" in
-              *.sha256 | SHA256SUMS*) ;;
+              *.sha256 | SHA256SUMS* | VERSION) ;;
               *) shasum -a 256 "$f" ;;
             esac
           done > SHA256SUMS
@@ -244,15 +265,63 @@ jobs:
         with:
           subject-checksums: dist/SHA256SUMS
 
-      # A draft: no updater or installer sees it until it is signed and
-      # published.
-      - name: Publish draft release
+      - name: Take the keys install.sh trusts
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          path: src
+          sparse-checkout: install.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # Signed here with the SWITCHER_RELEASE_SIGNING_KEY secret, and checked
+      # against the keys install.sh and the app trust (internal/fork). Without
+      # the secret the release stays a draft, to be signed away from GitHub
+      # with build/release-sign.sh.
+      - name: Sign the list of checksums
+        id: sign
+        env:
+          SIGNING_KEY: ${{ secrets.SWITCHER_RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No SWITCHER_RELEASE_SIGNING_KEY secret: $GITHUB_REF_NAME stays a draft until build/release-sign.sh signs it."
+            exit 0
+          fi
+          if grep -qx "release_signers=''" src/install.sh; then
+            echo "install.sh trusts no release key yet; run build/fork-release-key.sh and commit what it writes." >&2
+            exit 1
+          fi
+          key="$RUNNER_TEMP/release-key"
+          trap 'rm -f "$key"' EXIT
+          (umask 077 && printf '%s\n' "$SIGNING_KEY" > "$key")
+          ssh-keygen -q -Y sign -f "$key" -n switcher-release dist/SHA256SUMS < /dev/null
+          sed -n "/^release_signers='/,/'\$/p" src/install.sh | sed "s/^release_signers='//; s/'\$//" > "$RUNNER_TEMP/allowed_signers"
+          if ! ssh-keygen -Y verify -f "$RUNNER_TEMP/allowed_signers" -I switcher-release -n switcher-release \
+              -s dist/SHA256SUMS.sig < dist/SHA256SUMS > /dev/null; then
+            echo "SWITCHER_RELEASE_SIGNING_KEY is not a key install.sh trusts." >&2
+            exit 1
+          fi
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      # Signed, it is published as the latest release, which updaters and
+      # install.sh take. A draft is seen by none of them.
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          SIGNED: ${{ steps.sign.outputs.signed }}
         run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$SIGNED" = true ]; then
+            publish=(--latest)
+          else
+            publish=(--draft)
+          fi
           gh release create "$GITHUB_REF_NAME" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --draft \
+            "${publish[@]}" \
             --title "$GITHUB_REF_NAME" \
+            --notes "Switcher $VERSION: upstream Switcher ${VERSION%.*} with this fork's changes." \
             --generate-notes

@@ -25,3 +25,15 @@ Restart or reconfigure the user's running applications only when requested.
 Before changing Desktop routing, native credential ownership, or setup, read
 `docs/README.md` and the relevant linked contract. The pinned reference projects
 and local clone paths are documented in `docs/desktop-reference-map.md`.
+
+## This fork's releases
+
+This is a fork of 00xmario/Switcher. Updates, install.sh and the Tailscale
+add-on come from this fork's releases (`internal/fork`), signed with the
+fork's key. In this fork, `VERSION` is upstream's version and is changed only
+by upstream syncs, never for a fork change: the fork releases upstream X.Y.Z
+as vX.Y.Z.1, vX.Y.Z.2 and so on (`build/fork-release.sh`). Merging an
+upstream sync into main (a merge, not a rebase) tags and releases it through
+the Fork release workflow; fork-only changes ship when that workflow is run
+by hand. `internal/fork`'s tests fail if a sync brings back an upstream
+release address.
