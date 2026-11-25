@@ -87,9 +87,10 @@ type metadataCall struct {
 	err   error
 }
 
-// validTag accepts only release tags of the form vX.Y.Z, so a hostile
-// release tag never reaches a download URL or a file name.
-var validTag = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+$`)
+// validTag accepts only release tags of the form vX.Y.Z, or vX.Y.Z.N for the
+// fork's Nth release of upstream X.Y.Z, so a hostile release tag never
+// reaches a download URL or a file name.
+var validTag = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$`)
 
 // New creates a checker for the running version.
 func New(current string) *Checker { return &Checker{Current: current} }
@@ -280,7 +281,7 @@ func (c *Checker) Refresh() {
 func normalizeReleaseTag(raw string) (string, error) {
 	tag := strings.TrimSpace(raw)
 	if !validTag.MatchString(tag) {
-		return "", errors.New("invalid release version tag; expected vX.Y.Z")
+		return "", errors.New("invalid release version tag; expected vX.Y.Z or vX.Y.Z.N")
 	}
 	return "v" + strings.TrimPrefix(tag, "v"), nil
 }
@@ -401,7 +402,9 @@ func (c *Checker) Latest() string {
 	return c.latest
 }
 
-// compare returns >0 when a is newer than b (semver-ish, v tolerated).
+// compare returns >0 when a is newer than b (semver-ish, v tolerated). A
+// missing part counts as 0, so the fork's 1.40.0.1 is newer than upstream's
+// 1.40.0 and older than 1.41.0.
 func compare(a, b string) int {
 	a, b = strings.TrimPrefix(a, "v"), strings.TrimPrefix(b, "v")
 	if a == b {

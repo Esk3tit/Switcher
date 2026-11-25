@@ -770,11 +770,12 @@ type HostUpdate struct {
 // remoteUpdateSince is the first release a paired Mac can update.
 const remoteUpdateSince = "1.21.0"
 
-// atLeast compares release versions such as "1.21.0" or "v1.21.0".
+// atLeast compares release versions such as "1.21.0", "v1.21.0" or the
+// fork's "1.40.0.1".
 func atLeast(version, min string) bool {
-	parse := func(v string) (out [3]int, ok bool) {
+	parse := func(v string) (out [4]int, ok bool) {
 		parts := strings.Split(strings.TrimPrefix(v, "v"), ".")
-		if len(parts) != 3 {
+		if len(parts) != 3 && len(parts) != 4 {
 			return out, false
 		}
 		for i, p := range parts {
@@ -827,7 +828,7 @@ type HostUpdateSteps struct {
 
 // hostVersion accepts only version strings, so a host's answer never puts
 // markup into this Mac's menu or dashboard.
-var hostVersion = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+$`)
+var hostVersion = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$`)
 
 // installSteps are the steps a host's install reports, and "updating" while
 // this Mac waits on an install it asked for.

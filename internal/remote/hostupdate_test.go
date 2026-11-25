@@ -63,6 +63,16 @@ func TestTheHostsVersionIsOnlyEverAVersion(t *testing.T) {
 	if u.Current != "" || u.Latest != "" || u.Available || u.Install != nil {
 		t.Fatalf("sanitized: %+v", u)
 	}
+	u = HostUpdate{Current: "1.40.0.1", Latest: "v1.40.0.2", Available: true, Remote: true}
+	u.sanitize()
+	if u.Current != "1.40.0.1" || u.Latest != "v1.40.0.2" || !u.Available || !u.Remote {
+		t.Fatalf("a fork release was dropped: %+v", u)
+	}
+	for version, want := range map[string]bool{"1.40.0.1": true, "v1.21.0.1": true, "1.21.0": true, "1.20.9.9": false, "1.40": false, "1.40.0.1.2": false} {
+		if atLeast(version, remoteUpdateSince) != want {
+			t.Errorf("atLeast(%s, %s) is not %v", version, remoteUpdateSince, want)
+		}
+	}
 	u = HostUpdate{Install: &HostUpdateSteps{Step: "downloading", Fraction: 3}}
 	u.sanitize()
 	if u.Install == nil || u.Install.Fraction != 1 {
