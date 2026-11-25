@@ -17,7 +17,4 @@ const Repo = "Esk3tit/Switcher"
 // that one be lost. build/fork-release-key.sh makes both and writes them here
 // and into install.sh. Until it has, no release verifies and the Release
 // workflow refuses to publish one.
-var ReleaseKeys = []string{
-	"AAAAC3NzaC1lZDI1NTE5AAAAICJzT3kkppYEpDMzEvTM1VFj5DZvvn4ZCNoc77Z+pEc3", // switcher-fork-release-1, the Release workflow signs with it
-	"AAAAC3NzaC1lZDI1NTE5AAAAIFg+mUrEJyJTPdzjMI39Glx3M2x0DVDWldfyaDMDNyop", // switcher-fork-release-2, offline
-}
+var ReleaseKeys = []string{}

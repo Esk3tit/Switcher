@@ -90,8 +90,7 @@ check_tag() {
 # allowed_signers form: the one the Release workflow signs with, and one kept
 # offline in case that one is lost. The same as internal/fork.ReleaseKeys;
 # build/fork-release-key.sh writes both.
-release_signers='switcher-release namespaces="switcher-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICJzT3kkppYEpDMzEvTM1VFj5DZvvn4ZCNoc77Z+pEc3 switcher-fork-release-1
-switcher-release namespaces="switcher-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFg+mUrEJyJTPdzjMI39Glx3M2x0DVDWldfyaDMDNyop switcher-fork-release-2'
+release_signers=''
 
 # signed_checksum downloads the release's list of checksums and its
 # signature into $1, checks the signature, and leaves the one line for the
