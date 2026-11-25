@@ -394,7 +394,7 @@ func TestFallbackVersionIsFullyReadAndValidatedBeforePublication(t *testing.T) {
 			c := New("0.5.5")
 			c.latest = "v0.5.6"
 			client := &http.Client{Transport: metadataTransport(func(r *http.Request) (*http.Response, error) {
-				if r.Method != http.MethodGet || r.URL.String() != "https://raw.githubusercontent.com/"+Repo+"/main/VERSION" {
+				if r.Method != http.MethodGet || r.URL.String() != "https://github.com/"+Repo+"/releases/latest/download/VERSION" {
 					t.Errorf("unexpected metadata request: %s %s", r.Method, r.URL)
 				}
 				return &http.Response{StatusCode: tc.code, Body: io.NopCloser(chunkedVersionReader{strings.NewReader(tc.body)})}, nil
@@ -422,8 +422,11 @@ func TestReleaseMetadataPrefersValidTagAndFallsBackOnMalformedTag(t *testing.T) 
 		want      string
 		wantCalls int
 	}{
-		{"v0.5.7\n", "v0.5.7", 0},
+		{"fork-v0.5.7\n", "v0.5.7", 0},
 		{"not-a-release", "v0.5.8", 1},
+		// Upstream's own tag names no fork release.
+		{"v0.5.7", "v0.5.8", 1},
+		{"fork-vv0.5.7", "v0.5.8", 1},
 	} {
 		t.Run(tc.tag, func(t *testing.T) {
 			c := New("0.5.5")

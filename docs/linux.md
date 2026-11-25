@@ -7,7 +7,7 @@ macOS menu bar app is replaced by a tray icon and the web dashboard.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/00xmario/switcher/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Esk3tit/Switcher/main/install.sh | sh
 ```
 
 On Linux the script downloads `switcher-server_<version>_linux_<arch>` from

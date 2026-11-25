@@ -60,7 +60,7 @@ jobs:
       - name: Build Switcher.app
         run: |
           set -euo pipefail
-          VERSION=$(cat VERSION)
+          VERSION=$(cat FORK_VERSION)
           APP=build/Switcher.app
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           cp build/macos/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
@@ -74,7 +74,7 @@ jobs:
         id: build
         run: |
           mkdir -p dist
-          build/macos/installer/build.sh "$(cat VERSION)" build/Switcher.app dist/Install-Switcher.dmg "build/Install Switcher.app"
+          build/macos/installer/build.sh "$(cat FORK_VERSION)" build/Switcher.app dist/Install-Switcher.dmg "build/Install Switcher.app"
       - name: Install with it, in scratch folders
         timeout-minutes: 10
         run: build/macos/installer/test.sh "build/Install Switcher.app"
@@ -95,7 +95,7 @@ jobs:
           grep -q '"ok" : true' shots/gui/result.json
           grep -q '"running" : true' shots/gui/result.json
           /Applications/Switcher.app/Contents/MacOS/SwitcherServer status --json | tee shots/gui/status.json
-          grep -q "\"version\":\"$(cat VERSION)\"" shots/gui/status.json
+          grep -q "\"version\":\"$(cat FORK_VERSION)\"" shots/gui/status.json
           pgrep -fl /Applications/Switcher.app/Contents/MacOS/Switcher
           if xattr -r -l /Applications/Switcher.app | grep -q com.apple.quarantine; then echo "the installed app is flagged" >&2; exit 1; fi
           sleep 2

@@ -595,16 +595,22 @@ environment; a terminal-only override needs the CLI command. The first
 - Recovery copies of Claude Code logins (one per switch) are removed after
   30 days.
 - **Updates are signed.** A release's files are listed with their
-  checksums in `SHA256SUMS`, and that list is signed with Switcher's release
-  key, whose private half is kept away from GitHub. The updater and
-  `install.sh` install nothing whose list is not signed by that key (or by
-  a second one kept offline in case the first is lost), so whoever can
-  change a release on GitHub, with a stolen token say, still cannot get a
-  build installed. The updater downloads over HTTPS, follows redirects only
-  to GitHub's own hosts, and installs only a release newer than what runs.
+  checksums in `SHA256SUMS`, and that list is signed with this fork's
+  release key, which the fork's Release workflow holds as an Actions secret.
+  The updater and `install.sh` install nothing whose list is not signed by
+  that key (or by a second one kept offline in case the first is lost), so
+  whoever can change a release's files on GitHub, but cannot run that
+  workflow with its secrets, still cannot get a build installed. (Upstream
+  Switcher keeps its key away from GitHub altogether.) The updater
+  downloads over HTTPS, follows redirects only to GitHub's own hosts, and
+  installs only a release newer than what runs.
   `install.sh` downloads over HTTPS only, redirects included, bounds every
   download, and does not replace a newer installed version with an older
-  release unless `SWITCHER_TAG` asks for one. The
+  release unless `SWITCHER_TAG` asks for one. A Switcher that is not one of
+  this fork's builds (an upstream release, whose numbers are 1.40 and on
+  while this fork's start at 1.0.0) counts as older; so it does for the Mac
+  installer, which tells the fork's app by `SwitcherReleaseRepo` in its
+  `Info.plist`. The
   release pipeline builds only from commits on main, after the Linux and
   macOS checks pass, with its actions pinned to commits. The files are built
   in a job that can write nothing; a separate job, which runs only GitHub's

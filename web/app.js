@@ -129,7 +129,7 @@ const PLAN_NAMES = {
 
 const CLI_INSTALL = '/Applications/Switcher.app/Contents/MacOS/SwitcherServer install-cli';
 // On Linux the install script already puts switcher on the PATH.
-const cliInstall = () => data.platform === 'linux' ? 'curl -fsSL https://raw.githubusercontent.com/00xmario/switcher/main/install.sh | sh' : CLI_INSTALL;
+const cliInstall = () => data.platform === 'linux' ? 'curl -fsSL https://raw.githubusercontent.com/Esk3tit/Switcher/main/install.sh | sh' : CLI_INSTALL;
 
 // How each provider adds an account: browser popup, device code, or key.
 const ADD_METHOD = { codex: 'browser', claude: 'browser', grok: 'device', opencode: 'key', antigravity: 'browser', gemini: 'browser', copilot: 'device' };
@@ -2927,9 +2927,9 @@ async function renderSettings() {
         <p class="set-about-tag">One harness, all your AI accounts.</p>
         <p class="set-foot">Unofficial; not affiliated with Anthropic, OpenAI, xAI, Google or GitHub.</p>
         <div class="set-links">
-          <a href="https://github.com/00xmario/switcher" target="_blank" rel="noopener noreferrer">GitHub</a>
-          <a href="https://github.com/00xmario/switcher/releases" target="_blank" rel="noopener noreferrer">Release notes</a>
-          <a href="https://github.com/00xmario/switcher/blob/main/docs/README.md" target="_blank" rel="noopener noreferrer">Documentation</a>
+          <a href="https://github.com/Esk3tit/Switcher" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://github.com/Esk3tit/Switcher/releases" target="_blank" rel="noopener noreferrer">Release notes</a>
+          <a href="https://github.com/Esk3tit/Switcher/blob/main/docs/README.md" target="_blank" rel="noopener noreferrer">Documentation</a>
         </div>
       </div>`,
   };

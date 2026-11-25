@@ -20,13 +20,14 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"switcher/internal/fork"
 	"sync"
 	"time"
 )
 
 // The "Away from home" add-on: Switcher downloads switcher-tailnet only when
 // the user turns it on, so the app itself carries no Tailscale code.
-const tailnetRelease = "https://github.com/00xmario/switcher/releases/download"
+const tailnetRelease = "https://github.com/" + fork.Repo + "/releases/download"
 
 // addonSHA256 is the released add-on's digest for this build's platform, set
 // by the release workflow with -ldflags. Release builds trust only this; other
@@ -743,7 +744,7 @@ func (t *Tailnet) fetch(ctx context.Context, dest string) error {
 		return errors.New("the Tailscale add-on is only available for released versions")
 	}
 	asset := fmt.Sprintf("switcher-tailnet_%s_%s_%s", t.version, runtime.GOOS, runtime.GOARCH)
-	base := fmt.Sprintf("%s/v%s/%s", tailnetRelease, t.version, asset)
+	base := fmt.Sprintf("%s/%s/%s", tailnetRelease, fork.ReleaseTag(t.version), asset)
 	get := func(url string, limit int64) ([]byte, error) {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		resp, err := (&http.Client{}).Do(req)

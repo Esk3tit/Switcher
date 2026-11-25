@@ -139,6 +139,37 @@ func TestTheStateCarriesTheHostsUpdateCleaned(t *testing.T) {
 	}
 }
 
+// A fork's host numbers its releases apart from upstream's (1.0.0 and on):
+// whether it takes updates from here goes by the upstream release it is
+// based on, and an upstream host without one by its own version.
+func TestAForkHostIsJudgedByItsUpstreamBase(t *testing.T) {
+	for _, c := range []struct {
+		version, upstream string
+		remote            bool
+	}{
+		{"1.0.0", "1.40.0", true},
+		{"1.3.2", "1.21.0", true},
+		{"1.30.0", "1.20.0", false},
+		{"1.0.0", "", false},
+		{"1.40.0", "", true},
+		{"1.0.0", "<b>1.40.0</b>", false},
+	} {
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/state" {
+				state := map[string]any{"version": c.version, "accounts": []any{}, "active": map[string]any{}}
+				if c.upstream != "" {
+					state["upstream_version"] = c.upstream
+				}
+				json.NewEncoder(w).Encode(state)
+			}
+		})
+		_, client := pairedWith(t, next)
+		if state := hostState(t, client); state.Current != c.version || state.Remote != c.remote {
+			t.Errorf("host %s on upstream %q: %+v", c.version, c.upstream, state)
+		}
+	}
+}
+
 // hostState is the host_update this Mac's merged /api/state carries.
 func hostState(t *testing.T, client *Client) HostUpdate {
 	t.Helper()

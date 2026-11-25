@@ -770,6 +770,16 @@ type HostUpdate struct {
 // remoteUpdateSince is the first release a paired Mac can update.
 const remoteUpdateSince = "1.21.0"
 
+// upstreamVersion is the upstream release a host's Switcher is based on, for
+// comparing with upstream's releases: a fork's build says so in
+// upstream_version, as its own version is numbered apart.
+func upstreamVersion(state map[string]any, version string) string {
+	if upstream, _ := state["upstream_version"].(string); hostVersion.MatchString(upstream) {
+		return upstream
+	}
+	return version
+}
+
 // atLeast compares release versions such as "1.21.0" or "v1.21.0".
 func atLeast(version, min string) bool {
 	parse := func(v string) (out [3]int, ok bool) {
@@ -1090,7 +1100,7 @@ type LocalState func(r *http.Request) map[string]any
 // localStateKeys stay this Mac's own in the merged /api/state.
 var localStateKeys = []string{"version", "update", "desktop_relay", "hub_url", "hub_management_key",
 	"menu_usage_bars", "reset_notifications", "compact_accounts", "merge_accounts", "auto_switch", "awake",
-	"platform", "handed_back", "autostart"}
+	"platform", "handed_back", "autostart", "upstream_version"}
 
 // Middleware sends account and provider traffic to the host while connected.
 func (c *Client) Middleware(local LocalState, next http.Handler) http.Handler {
@@ -1301,7 +1311,7 @@ func (c *Client) State(r *http.Request, local LocalState, read bool) map[string]
 			hostUpdate.Install = &HostUpdateSteps{Step: step, Fraction: fraction}
 		}
 	}
-	hostUpdate.Remote = atLeast(hostUpdate.Current, remoteUpdateSince)
+	hostUpdate.Remote = atLeast(upstreamVersion(state, hostUpdate.Current), remoteUpdateSince)
 	c.markInstalling(&hostUpdate)
 	hostUpdate.sanitize()
 

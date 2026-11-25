@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs or updates Switcher on this Mac or Linux computer, also over SSH:
 #
-#   curl -fsSL https://raw.githubusercontent.com/00xmario/switcher/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Esk3tit/Switcher/main/install.sh | sh
 #
 # It downloads the latest release over HTTPS only and installs nothing that
 # does not match the release's checksums, signed with Switcher's release key
@@ -14,7 +14,11 @@
 # that are still in flight.
 set -eu
 
-repo=00xmario/switcher
+# The fork whose releases this installs: internal/fork.Repo. Its release
+# tags are fork-vX.Y.Z (internal/fork.TagPrefix): the fork numbers its
+# releases on its own, from 1.0.0.
+repo=Esk3tit/Switcher
+tag_prefix=fork-v
 # Where releases come from; tests point it at a local copy.
 releases=${SWITCHER_RELEASES:-https://github.com/$repo/releases}
 
@@ -65,7 +69,8 @@ newer_than() {
 
 # no_downgrade refuses to replace installed version $1 with an older one:
 # an older release can have flaws a newer one fixed. SWITCHER_TAG, set by
-# you, installs the release it names all the same.
+# you, installs the release it names all the same. $1 is empty for a
+# Switcher that is not this fork's (see other_line).
 no_downgrade() {
 	[ -n "$1" ] && [ -z "${SWITCHER_TAG:-}" ] || return 0
 	if newer_than "$1" "$version"; then
@@ -73,23 +78,23 @@ no_downgrade() {
 	fi
 }
 
-# A release tag is vX.Y.Z and nothing else: it becomes part of file names
-# and addresses.
+# A release tag is fork-vX.Y.Z and nothing else: it becomes part of file
+# names and addresses.
 check_tag() {
 	case "$1" in
-	v[0-9]*) ;;
+	"$tag_prefix"[0-9]*) ;;
 	*) fail "Unexpected release name: $1" ;;
 	esac
-	case "${1#v}" in
+	case "${1#"$tag_prefix"}" in
 	*[!0-9.]* | *..* | .* | *.) fail "Unexpected release name: $1" ;;
 	esac
 }
 
-# The keys Switcher's releases are signed with, in ssh-keygen's
-# allowed_signers form: the one releases are signed with, and one kept
-# offline in case that one is lost. See build/release-sign.sh.
-release_signers='switcher-release namespaces="switcher-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO2UJMe8yL/18YTufkesQEr9AjT32/Z8JzvCgtKjvya0 switcher-release-1
-switcher-release namespaces="switcher-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINkxLFXWXQDLvgFD+nK2tMMikz25kdCf3rh1W9F4Cmzp switcher-release-2'
+# The keys the fork's releases are signed with, in ssh-keygen's
+# allowed_signers form: the one the Release workflow signs with, and one kept
+# offline in case that one is lost. The same as internal/fork.ReleaseKeys;
+# build/fork-release-key.sh writes both.
+release_signers=''
 
 # signed_checksum downloads the release's list of checksums and its
 # signature into $1, checks the signature, and leaves the one line for the
@@ -115,6 +120,14 @@ checksum_names() {
 	[ "$(awk '{ name = $2; sub(/^\*/, "", name); print name }' "$1")" = "$2" ]
 }
 
+# other_line says that the installed Switcher $1 is not one of this fork's
+# builds, whose versions are numbered on their own: upstream Switcher's are
+# 1.40.0 and on, this fork's start at 1.0.0. Replacing it is no downgrade.
+other_line() {
+	echo "Switcher $1 from another source is installed; it is replaced with this fork's Switcher $version ($repo)."
+	echo "Your accounts and settings stay as they are."
+}
+
 # stop_switcher quits the app in $1 and waits until it has exited.
 stop_switcher() {
 	pattern="$1/Contents/MacOS/"
@@ -137,7 +150,10 @@ stop_switcher() {
 
 latest_tag() {
 	if [ -n "${SWITCHER_TAG:-}" ]; then
-		echo "$SWITCHER_TAG"
+		case "$SWITCHER_TAG" in
+		"$tag_prefix"*) echo "$SWITCHER_TAG" ;;
+		*) echo "$tag_prefix${SWITCHER_TAG#v}" ;;
+		esac
 		return
 	fi
 	curl --proto '=https' --proto-redir '=https' --tlsv1.2 --max-filesize 1048576 -fsSL "https://api.github.com/repos/$repo/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1
@@ -181,12 +197,17 @@ install_linux() {
 	tag=$(latest_tag)
 	[ -n "$tag" ] || fail "Could not find the latest Switcher release."
 	check_tag "$tag"
-	version=${tag#v}
+	version=${tag#"$tag_prefix"}
 	asset="switcher-server_${version}_linux_$arch"
 	bin="$HOME/.local/bin"
 	installed=
 	if [ -x "$bin/switcher" ]; then
 		installed=$("$bin/switcher" version 2>/dev/null | sed -n 's/^switcher \([0-9][0-9.]*\)$/\1/p' | head -n 1)
+		# This fork's builds carry its repository's name, to take its releases.
+		if [ -n "$installed" ] && ! grep -qF "$repo" "$bin/switcher"; then
+			other_line "$installed"
+			installed=
+		fi
 	fi
 	no_downgrade "$installed"
 
@@ -245,12 +266,19 @@ main() {
 	tag=$(latest_tag)
 	[ -n "$tag" ] || fail "Could not find the latest Switcher release."
 	check_tag "$tag"
-	version=${tag#v}
+	version=${tag#"$tag_prefix"}
 	dmg="Switcher_$version.dmg"
 	installed=
 	for app in /Applications/Switcher.app "$HOME/Applications/Switcher.app"; do
-		[ -n "$installed" ] || [ ! -f "$app/Contents/Info.plist" ] ||
-			installed=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null | sed -n 's/^\([0-9][0-9.]*\)$/\1/p')
+		if [ -n "$installed" ] || [ ! -f "$app/Contents/Info.plist" ]; then
+			continue
+		fi
+		installed=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null | sed -n 's/^\([0-9][0-9.]*\)$/\1/p')
+		# This fork's apps name its repository in SwitcherReleaseRepo.
+		if [ -n "$installed" ] && [ "$(/usr/libexec/PlistBuddy -c 'Print :SwitcherReleaseRepo' "$app/Contents/Info.plist" 2>/dev/null)" != "$repo" ]; then
+			other_line "$installed"
+			installed=
+		fi
 	done
 	no_downgrade "$installed"
 

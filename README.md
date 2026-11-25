@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/00xmario/switcher/releases/latest/download/Install-Switcher.dmg"><strong>Download for macOS</strong></a>
+  <a href="https://github.com/Esk3tit/Switcher/releases/latest/download/Install-Switcher.dmg"><strong>Download for macOS</strong></a>
   &nbsp;·&nbsp; <a href="docs/linux.md">Linux</a>
   &nbsp;·&nbsp; <a href="#command-line">Command line</a>
   &nbsp;·&nbsp; <a href="docs/phone.md">On your phone</a>
@@ -197,7 +197,7 @@ and a six-digit code; only phones you approve on the Mac get in.
 ## Install
 
 **On a Mac**, download
-[Install Switcher](https://github.com/00xmario/switcher/releases/latest/download/Install-Switcher.dmg),
+[Install Switcher](https://github.com/Esk3tit/Switcher/releases/latest/download/Install-Switcher.dmg),
 open it, and do what its window shows:
 
 1. Double-click **Install Switcher**. macOS says it can't check the app:
@@ -224,7 +224,7 @@ so it does not ask again.
 **From Terminal**, or over SSH:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/00xmario/switcher/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Esk3tit/Switcher/main/install.sh | sh
 ```
 
 The script installs the latest release into Applications, adds the
@@ -262,6 +262,14 @@ Switcher sits in a folder you cannot change, such as Applications
 on a standard account, macOS asks for an administrator password. Versions
 up to 1.11 updated through the GitHub CLI and fail on Macs without it;
 update those once with the install script above.
+
+This fork numbers its releases on its own, from 1.0.0, and its updates come
+only from its own releases. A Switcher installed from upstream's releases
+(1.40 and on) keeps updating from upstream and never offers this fork's:
+install this fork's Switcher once, with the installer or the install script
+above, which replace it as an older version and keep your accounts and
+settings. Each fork release's notes name the upstream Switcher version and
+commit it is built on.
 
 ## Quick start
 
@@ -344,8 +352,8 @@ The full matrix, including what is verified per native CLI, is in
   your user run only `pmset disablesleep 1` and `pmset disablesleep 0`
   (`/etc/sudoers.d/switcher_lid_<user>`). Switcher turns sleep back on when
   keep awake ends and never undoes a sleep setting another app made.
-- Updates are signed: each release's checksums carry a signature by
-  Switcher's release key, which is kept away from GitHub, and neither the
+- Updates are signed: each release's checksums carry a signature by this
+  fork's release key, an Actions secret of its Release workflow, and neither the
   updater nor the install script installs anything without it. The download
   must match its signed SHA-256, and the new app's version, signature and
   server must check out before it replaces the old one.
