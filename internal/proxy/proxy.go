@@ -134,12 +134,17 @@ type Manager struct {
 	// autoResetAt throttles automatic redemptions per account so a client
 	// retry loop cannot drain every banked reset on a limit that a reset
 	// does not actually clear.
-	autoResetAt   map[string]time.Time
-	planChecked   map[string]time.Time
-	resetEvents   map[string]ResetEvent
-	resetSerial   uint64
-	quotaRevision map[string]uint64
-	spentCredits  map[string]map[string]int64
+	autoResetAt map[string]time.Time
+	// fableSpent marks an account an automatic Fable reset was spent on;
+	// it gets another only after usage shows it below the limit again.
+	fableSpent map[string]bool
+	// fableResetting keeps automatic Fable resets to one run at a time.
+	fableResetting atomic.Bool
+	planChecked    map[string]time.Time
+	resetEvents    map[string]ResetEvent
+	resetSerial    uint64
+	quotaRevision  map[string]uint64
+	spentCredits   map[string]map[string]int64
 	// quotaLog records the accounts' quota over time for Insights: usage
 	// readings, limits refused and switches. Nil records nothing.
 	quotaLog *quota.Recorder
@@ -704,9 +709,13 @@ func (m *Manager) RefreshUsageAll(ctx context.Context) {
 		}(j)
 	}
 	wg.Wait()
-	// Fresh usage may show Claude Code's account at its limit. The switch
-	// runs outside the poll's locks.
-	go m.AutoSwitchNative()
+	// Fresh usage may show Claude Code's account at its limit. An account
+	// set to spend a Fable reset then does so first (fablereset.go); the
+	// switch runs after, outside the poll's locks.
+	go func() {
+		m.autoFableResets()
+		m.AutoSwitchNative()
+	}()
 }
 
 // refreshAccount refreshes the token if needed and polls usage for one
@@ -878,7 +887,7 @@ func usageHasRoom(u provider.Usage) bool {
 		return false
 	}
 	for _, w := range u.Windows {
-		if w.UsedPercent >= 100 {
+		if w.UsedPercent >= 100 && !provider.OtherModelWindow(w.Label) {
 			return false
 		}
 	}
