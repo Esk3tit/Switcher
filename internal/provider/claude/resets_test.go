@@ -335,3 +335,44 @@ func TestResetIneligibility(t *testing.T) {
 		}
 	}
 }
+
+// When the usage endpoint refuses the account (429), a reset is still spent
+// from the list seen last, with a new token too, and whether it can be used
+// is left to Claude; with no list seen, the refusal stands.
+func TestARefusedListingFallsBackToTheLastOneSeen(t *testing.T) {
+	refuse := false
+	old := http.DefaultClient
+	http.DefaultClient = &http.Client{Transport: testTransport(func(req *http.Request) (*http.Response, error) {
+		if refuse {
+			return &http.Response{StatusCode: 429, Body: io.NopCloser(strings.NewReader(`{}`)), Header: http.Header{}}, nil
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(resetFixture)), Header: http.Header{}}, nil
+	})}
+	t.Cleanup(func() { http.DefaultClient = old })
+	p := New()
+	if _, err := p.ListResetCredits(context.Background(), store.Account{ID: "other", Token: store.Token{AccessToken: "x"}}); err != nil {
+		t.Fatal(err)
+	}
+	refuse = true
+	if _, err := p.ListResetCredits(provider.FreshCredits(context.Background()), store.Account{ID: "claude-1", Token: store.Token{AccessToken: "t"}}); err == nil {
+		t.Fatal("a refused listing with no list seen succeeded")
+	}
+	refuse = false
+	account := store.Account{ID: "claude-1", Token: store.Token{AccessToken: "t"}}
+	if _, err := p.Usage(context.Background(), account); err != nil {
+		t.Fatal(err)
+	}
+	refuse = true
+	account.Token.AccessToken = "t2"
+	for _, ctx := range []context.Context{provider.FreshCredits(context.Background()), context.Background()} {
+		credits, err := p.ListResetCredits(ctx, account)
+		if err != nil || len(credits) != 4 {
+			t.Fatalf("fallback: %d credits, err %v", len(credits), err)
+		}
+		for _, c := range credits {
+			if c.Unusable != "" {
+				t.Fatalf("an old note stayed: %+v", c)
+			}
+		}
+	}
+}
