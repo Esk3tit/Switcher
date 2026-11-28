@@ -66,9 +66,16 @@ type resetSnapshot struct {
 // The usage check runs every few minutes and refreshes the snapshot; the
 // account view lists from it rather than asking Claude's rate-limited usage
 // endpoint again. Spending a reset always asks afresh.
+//
+// Claude's usage endpoint sometimes refuses an account for hours (HTTP 429)
+// while claiming a reset, another endpoint, still works. Then the last list
+// seen, up to resetFallbackAge old, stands in: Claude itself refuses a reset
+// that is gone or cannot be used, so an old list cannot spend one it should
+// not.
 const (
 	resetSnapshotTTL = 10 * time.Minute
 	resetBackoff     = 5 * time.Minute
+	resetFallbackAge = 24 * time.Hour
 )
 
 func (p *Provider) rememberResets(a store.Account, raw []byte) {
@@ -118,6 +125,29 @@ func (p *Provider) recentResets(a store.Account) []byte {
 	return snap.raw
 }
 
+// lastResets is the last list seen for the account, up to resetFallbackAge
+// old, whatever token it was read with: the resets belong to the account.
+func (p *Provider) lastResets(a store.Account) []byte {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	snap, ok := p.resets[a.ID]
+	if !ok || a.ID == "" || time.Since(snap.at) > resetFallbackAge {
+		return nil
+	}
+	return snap.raw
+}
+
+// staleCredits reads a list seen earlier. Whether a reset can be used now
+// (Unusable) is from then, often from before the limit was reached, so it is
+// left to Claude, who refuses a claim that cannot be used without spending.
+func staleCredits(raw []byte) ([]provider.ResetCredit, error) {
+	credits, err := parseResetCredits(raw, time.Now())
+	for i := range credits {
+		credits[i].Unusable = ""
+	}
+	return credits, err
+}
+
 func (p *Provider) backOffResets(a store.Account) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -148,6 +178,9 @@ func (p *Provider) ListResetCredits(ctx context.Context, a store.Account) ([]pro
 			return parseResetCredits(raw, time.Now())
 		}
 		if p.resetsBackingOff(a) {
+			if raw := p.lastResets(a); raw != nil {
+				return staleCredits(raw)
+			}
 			return nil, errors.New("list reset credits: http 429")
 		}
 	}
@@ -168,6 +201,10 @@ func (p *Provider) ListResetCredits(ctx context.Context, a store.Account) ([]pro
 	if status != http.StatusOK {
 		if status == http.StatusTooManyRequests {
 			p.backOffResets(a)
+			if raw := p.lastResets(a); raw != nil {
+				log.Printf("claude: usage endpoint refuses %s (429); using the banked resets last seen", a.Email)
+				return staleCredits(raw)
+			}
 		}
 		return nil, fmt.Errorf("list reset credits: http %d", status)
 	}
