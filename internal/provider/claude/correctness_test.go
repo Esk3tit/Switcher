@@ -255,3 +255,30 @@ func TestFencedRefreshRequiresRelogin(t *testing.T) {
 		t.Fatalf("fenced refresh: %v", err)
 	}
 }
+
+// Once Claude refuses an account's usage (429), refused requests do not ask
+// again for usageBackoff: one lookup for a burst, however long it lasts.
+func TestRefusedRequestsDoNotHammerARefusedUsageEndpoint(t *testing.T) {
+	calls := 0
+	old := http.DefaultClient
+	http.DefaultClient = &http.Client{Transport: testTransport(func(req *http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{StatusCode: 429, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+	})}
+	t.Cleanup(func() { http.DefaultClient = old })
+	p := New()
+	a := store.Account{ID: "claude-1", Token: store.Token{AccessToken: "t", ExpiresAt: time.Now().Add(time.Hour).Unix()}}
+	generic := []byte(`{"error":{"type":"rate_limit_error","message":"Request rate limit exceeded"}}`)
+	for i := 0; i < 20; i++ {
+		if _, out := p.ParseRateLimit(context.Background(), a, 429, generic); out {
+			t.Fatal("a refusal with no usage parked the account")
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("asked usage %d times, want 1", calls)
+	}
+	// An explicit out-of-usage refusal still parks it.
+	if _, out := p.ParseRateLimit(context.Background(), a, 429, []byte(`{"error":{"type":"usage_limit_reached"}}`)); !out || calls != 1 {
+		t.Fatalf("explicit exhaustion: out=%v calls=%d", out, calls)
+	}
+}

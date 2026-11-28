@@ -44,14 +44,26 @@ const (
 
 // Provider implements provider.Provider for Claude.
 type Provider struct {
-	mu          sync.Mutex
-	verifier    map[string]verifierEntry
-	limits      map[string]cachedUsage
-	resets      map[string]resetSnapshot
-	resetsWait  map[string]time.Time
+	mu         sync.Mutex
+	verifier   map[string]verifierEntry
+	limits     map[string]cachedUsage
+	resets     map[string]resetSnapshot
+	resetsWait map[string]time.Time
+	// usageWait is when an account's usage may be asked again after Claude
+	// refused it (429), by ParseRateLimit; the poll keeps its own pause.
+	usageWait   map[string]time.Time
 	Native      *claudecode.Manager
 	nativeError error
 }
+
+// usageBackoff is how long ParseRateLimit waits before asking an account's
+// usage again after Claude refused it: asking on every refused request kept
+// the refusal going for hours. usageStaleLimit is how old a reading it uses
+// meanwhile may be.
+const (
+	usageBackoff    = 5 * time.Minute
+	usageStaleLimit = 15 * time.Minute
+)
 
 // cachedUsage lets a burst of 429s share one usage lookup.
 type cachedUsage struct {
@@ -387,6 +399,14 @@ func (p *Provider) Usage(ctx context.Context, a store.Account) (provider.Usage, 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusTooManyRequests {
+			p.mu.Lock()
+			if p.usageWait == nil {
+				p.usageWait = map[string]time.Time{}
+			}
+			p.usageWait[a.ID] = time.Now().Add(usageBackoff)
+			p.mu.Unlock()
+		}
 		return provider.Usage{}, provider.UsageStatusError(resp.StatusCode)
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -470,9 +490,16 @@ func (p *Provider) ParseRateLimit(ctx context.Context, a store.Account, status i
 	exhausted := explicitSubscriptionExhaustion(body)
 	p.mu.Lock()
 	cached, ok := p.limits[a.ID]
+	backingOff := time.Now().Before(p.usageWait[a.ID])
 	p.mu.Unlock()
 	usage, err := cached.usage, error(nil)
-	if !ok || time.Since(cached.at) > time.Minute {
+	if backingOff && (!ok || time.Since(cached.at) > time.Minute) {
+		// Claude refused this account's usage lately: decide on the last
+		// reading, if recent enough, instead of asking again.
+		if !ok || time.Since(cached.at) > usageStaleLimit {
+			err = provider.ErrUsageUnavailable
+		}
+	} else if !ok || time.Since(cached.at) > time.Minute {
 		if usage, err = p.Usage(ctx, a); err == nil {
 			p.mu.Lock()
 			if p.limits == nil {
